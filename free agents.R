@@ -51,20 +51,20 @@ fa_2021<-url %>% read_html() %>% html_nodes("table") %>% .[[1]] %>% html_table()
   rename(Player=`Player (206)`) %>% select(Player,Type) %>% mutate(season=2020)
 fa_2021<-full_join(fa_2021,weird_names) %>% arrange(Player) %>% clean_names() %>% 
   mutate(contract_yrs=NA,first_year_percent_of_cap=NA)
-rm(weird_names)
 
 write_csv(fa_2021,"Free Agents 2020.csv")
 #go into excel and correct names to match bball-ref
 
 salary_cap_hist_url<-"https://basketball.realgm.com/nba/info/salary_cap"
 salary_cap_hist<-salary_cap_hist_url %>% read_html() %>% 
-  html_node("table") %>% html_table(fill=TRUE)
+  html_nodes(xpath='//*[contains(concat( " ", @class, " " ), concat( " ", "compact", " " ))]') %>% 
+  .[[1]] %>% html_table(fill=TRUE)
 #add correct column names (ended up as first row)
 colnames(salary_cap_hist)<-salary_cap_hist[1,]
 salary_cap_hist<-salary_cap_hist[-1,]
 #only take year and cap number, parse cap into a number (has dollar sign and commas originally)
 salary_cap_hist<-salary_cap_hist %>% select(3:4) %>%
   rename(season=`Luxury Tax`,cap=BAE) %>%
-  mutate(season=as.numeric(substr(season,0,4))) %>%
+  mutate(season=as.numeric(str_sub(season,start=-4))) %>%
   mutate(cap=parse_number(cap))
 write_csv(salary_cap_hist,"Salary Cap History.csv")
