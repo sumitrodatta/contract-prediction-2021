@@ -40,6 +40,7 @@ write_csv(prev_free_agents %>% bind_rows(free_agents),"2016-2020 Free Agents.csv
 #omari spellman not free agent (traded to nyk from min)
 #juwan morgan not free agent
 #write_csv(free_agents,"2016-2019 Free Agents.csv")
+
 #add Jr. to Derrick Jones
 #add III to Glenn Robinson, Frank Mason
 #add II to Gary Payton
@@ -48,11 +49,24 @@ write_csv(prev_free_agents %>% bind_rows(free_agents),"2016-2020 Free Agents.csv
 #wait until after free agent window!!!
 url="https://www.spotrac.com/nba/free-agents/"
 fa_2021<-url %>% read_html() %>% html_nodes("table") %>% .[[1]] %>% html_table() %>% 
-  rename(Player=`Player (206)`) %>% select(Player,Type) %>% mutate(season=2020)
-fa_2021<-full_join(fa_2021,weird_names) %>% arrange(Player) %>% clean_names() %>% 
+  rename(Player=`Player (202)`) %>% select(Player,Type) %>% mutate(season=2021) %>% 
+  separate(Player,into=c('to_discard','player'),sep='\\s{2,100}') %>% select(-to_discard) %>%
+  arrange(player) %>% clean_names() %>% 
+  mutate(player=case_when(str_detect(player,'Boban')~'Boban Marjanović',
+                          str_detect(player,'Cristiano')~'Cristiano Felício',
+                          str_detect(player,'Ersan')~'Ersan İlyasova',
+                          str_detect(player,'Goran')~'Goran Dragić',
+                          str_detect(player,'Ishmael')~'Ish Smith',
+                          str_detect(player,'Ennis III')~'James Ennis',
+                          str_detect(player,'Louis Will')~'Lou Williams',
+                          str_detect(player,'Nicolo')~'Nicolò Melli',
+                          str_detect(player,'Otto')~'Otto Porter',
+                          str_detect(player,'Patrick Mills')~'Patty Mills',
+                          str_detect(player,'Willy Hernan')~'Willy Hernangómez',
+                          TRUE~player)) %>%
   mutate(contract_yrs=NA,first_year_percent_of_cap=NA)
 
-write_csv(fa_2021,"Free Agents 2020.csv")
+write_csv(fa_2021,"Free Agents 2021.csv")
 #go into excel and correct names to match bball-ref
 
 salary_cap_hist_url<-"https://basketball.realgm.com/nba/info/salary_cap"
