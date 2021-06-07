@@ -1,0 +1,55 @@
+---
+title: "NBA Free Agency Contract Prediction 2021"
+author: "Sumitro Datta"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: pdf_document
+header-includes:
+   - \usepackage{float}
+   - \usepackage{titling}
+   - \setlength{\droptitle}{-5em} 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE,
+                      echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+# Introduction
+
+Day 1 of NBA free agency is by far the biggest day of the offseason for the league. While last year's class itself wasn't as star studded as 2019, it still provided plenty of drama with the COVID-19 pandemic still hanging around like an ominous cloud. The Milwaukee Bucks' trade for Bogdan Bogdanović of the Sacramento Kings was leaked before the official opening of the moratorium and subsequently backtracked, allowing the Atlanta Hawks to swoop in and sign Bogdanović to a 4-year, `$72M` contract. Anthony Davis shut down speculation that he was going to take a shorter-term contract to maximize his earning potential in later years by agreeing to a 5-year, `$190M` maximum contract extension with the Los Angeles Lakers. Jerami Grant desired a shot at being a Number 1 option, signing a 3-year, `$60M` contract with the rebuilding Detroit Pistons after rejecting a similar deal to re-sign with the promising Denver Nuggets, who had reached the Western Conference Finals that year. And Gordon Hayward closed the fascinating Boston chapter of his NBA career, opting out of `$34.2M` and signing with the Charlotte Hornets to the tune of 4 years and `$120M`.
+
+What I wanted to do was predict what contracts this year's free agent class might get based off previous offseasons. Stars generally get star-type money, but in tiers below, contracts of comparable players usually come up in discussing contract value.
+
+# Methods/Analysis
+
+## Loading Packages
+
+Let's start by loading required packages.
+```{r load_pkgs, results="hide"}
+if(!require(tidyverse)) 
+  install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(tidymodels)) 
+  install.packages("tidymodels", repos = "http://cran.us.r-project.org")
+#ranger is random forest algorithm wrappers
+if(!require(ranger)) 
+  install.packages("ranger", repos = "http://cran.us.r-project.org")
+#zoo allows rolling operations
+if(!require(zoo))
+  install.packages("zoo", repos = "http://cran.us.r-project.org")
+#matrix stats
+if(!require(matrixStats)) 
+  install.packages("matrixStats", repos = "http://cran.us.r-project.org")
+#rpart.plot shows the decision tree of an rpart result
+if(!require(rpart.plot)) 
+  install.packages("rpart.plot", repos = "http://cran.us.r-project.org")
+#kableExtra allows more customization of tables
+if(!require(kableExtra)) 
+  install.packages("kableExtra")
+if(!require(RColorBrewer)) 
+  install.packages("RColorBrewer", repos = "http://cran.us.r-project.org")
+#for dark background plots
+if(!require(ggdark)) 
+  install.packages("ggdark", repos = "http://cran.us.r-project.org")
+```
