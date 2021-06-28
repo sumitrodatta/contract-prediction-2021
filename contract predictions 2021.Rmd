@@ -18,7 +18,9 @@ knitr::opts_chunk$set(cache=TRUE,
 
 # Introduction
 
-Day 1 of NBA free agency is by far the biggest day of the offseason for the league. While last year's class itself wasn't as star studded as 2019, it still provided plenty of drama with the COVID-19 pandemic still hanging around like an ominous cloud. The Milwaukee Bucks' trade for Bogdan Bogdanović of the Sacramento Kings was leaked before the official opening of the moratorium and subsequently backtracked, allowing the Atlanta Hawks to swoop in and sign Bogdanović to a 4-year, `$72M` contract. Anthony Davis shut down speculation that he was going to take a shorter-term contract to maximize his earning potential in later years by agreeing to a 5-year, `$190M` maximum contract extension with the Los Angeles Lakers. Jerami Grant desired a shot at being a Number 1 option, signing a 3-year, `$60M` contract with the rebuilding Detroit Pistons after rejecting a similar deal to re-sign with the promising Denver Nuggets, who had reached the Western Conference Finals that year. And Gordon Hayward closed the fascinating Boston chapter of his NBA career, opting out of `$34.2M` and signing with the Charlotte Hornets to the tune of 4 years and `$120M`.
+Day 1 of NBA free agency is by far the biggest day of the offseason for the league. While last year's class itself wasn't as star studded as 2019, it still provided plenty of drama with the COVID-19 pandemic still hanging around like an ominous cloud. The Milwaukee Bucks' trade for Bogdan Bogdanović of the Sacramento Kings was leaked before the official opening of the moratorium and subsequently backtracked, allowing the Atlanta Hawks to swoop in and sign Bogdanović to a [4-year, `$72M` contract](https://www.nba.com/news/report-hawks-sign-bogdan-bogdanovic-to-offer-sheet). Anthony Davis shut down speculation that he was going to take a shorter-term contract to maximize his earning potential in later years by agreeing to a [5-year, `$190M` maximum contract extension](https://www.espn.com/nba/story/_/id/30442167/anthony-davis-finalizing-five-year-190-million-maximum-contract-stay-los-angeles-lakers) with the Los Angeles Lakers. Jerami Grant desired a shot at being a Number 1 option, signing a [3-year, `$60M` contract](https://www.denverpost.com/2020/11/20/jerami-grant-pistons-reach-agreement-nuggets/) with the rebuilding Detroit Pistons after rejecting a similar deal to re-sign with the promising Denver Nuggets, who had reached the Western Conference Finals that year. And Gordon Hayward closed the fascinating Boston chapter of his NBA career, opting out of `$34.2M` and signing with the Charlotte Hornets to the tune of [4 years and `$120M`](https://www.cbssports.com/nba/news/celtics-hornets-complete-gordon-hayward-sign-and-trade-exchange-future-second-round-pick/).
+
+*ADD SEGUE HERE*
 
 What I wanted to do was predict what contracts this year's free agent class might get based off previous offseasons. Stars generally get star-type money, but in tiers below, contracts of comparable players usually come up in discussing contract value.
 
@@ -53,3 +55,19 @@ if(!require(RColorBrewer))
 if(!require(ggdark)) 
   install.packages("ggdark", repos = "http://cran.us.r-project.org")
 ```
+
+## Importing the Data
+
+There are five files I'll import.
+```{r load_stats}
+advanced<-read_csv("Advanced.csv") %>% 
+  mutate(tm=ifelse(tm=="TOT","1TOT",tm)) %>% 
+  group_by(player_id,season) %>% arrange(tm) %>% slice(1) %>% 
+  mutate(tm=ifelse(tm=="1TOT","TOT",tm)) %>% select(seas_id:mp,ows:ws,vorp)
+totals<-read_csv("Player Totals.csv") %>% 
+  mutate(tm=ifelse(tm=="TOT","1TOT",tm)) %>% 
+  group_by(player_id,season) %>% arrange(tm) %>% slice(1) %>% 
+  mutate(tm=ifelse(tm=="1TOT","TOT",tm))
+advanced_and_totals<-inner_join(totals,advanced)
+```
+For the statistical data, I've scraped total and advanced stats from Basketball-Reference and stored them in .csv files. The advanced stats I kept were cumulative (offensive win shares, defensive win shares and value over replacement player). This was actually part of a larger project to scrape complete statistics for teams, players and awards (the Kaggle dataset resides [here](https://www.kaggle.com/sumitrodatta/nba-aba-baa-stats)). To my knowledge, my dataset is unique in that it includes BAA stats and ABA stats, which is not really of use here. For players who played on multiple teams in one season, I kept their total stats and discarded the team-specific season portions.
