@@ -49,7 +49,8 @@ write_csv(prev_free_agents %>% bind_rows(free_agents),"2016-2020 Free Agents.csv
 #wait until after free agent window!!!
 url="https://www.spotrac.com/nba/free-agents/"
 fa_2021<-url %>% read_html() %>% html_nodes("table") %>% .[[1]] %>% html_table() %>% 
-  rename(Player=`Player (202)`) %>% select(Player,Type) %>% mutate(season=2021) %>% 
+  filter(`Pos.` != "COA") %>% rename(Player=1,Experience=Exp) %>% 
+  select(Player,Type,Experience) %>%  mutate(season=2021) %>% 
   separate(Player,into=c('to_discard','player'),sep='\\s{2,100}') %>% select(-to_discard) %>%
   arrange(player) %>% clean_names() %>% 
   mutate(player=case_when(str_detect(player,'Boban')~'Boban Marjanović',
@@ -67,7 +68,7 @@ fa_2021<-url %>% read_html() %>% html_nodes("table") %>% .[[1]] %>% html_table()
   mutate(contract_yrs=NA,first_year_percent_of_cap=NA)
 
 write_csv(fa_2021,"Free Agents 2021.csv")
-#go into excel and correct names to match bball-ref
+#add option salary amounts manually
 
 salary_cap_hist_url<-"https://basketball.realgm.com/nba/info/salary_cap"
 salary_cap_hist<-salary_cap_hist_url %>% read_html() %>% 
