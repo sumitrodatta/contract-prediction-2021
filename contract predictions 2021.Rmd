@@ -60,14 +60,92 @@ if(!require(ggdark))
 
 There are five files I'll import.
 ```{r load_stats}
-advanced<-read_csv("Advanced.csv") %>% 
+#specify columns because otherwise birth year is read as logical
+cols_for_stats=cols(
+  .default = col_double(),
+  player = col_character(),
+  hof = col_logical(),
+  pos = col_character(),
+  lg = col_character(),
+  tm = col_character()
+)
+
+advanced<-read_csv("Advanced.csv",col_types = cols_for_stats) %>%
+  select(seas_id:mp,ows:ws,vorp)
+totals<-read_csv("Player Totals.csv",col_types = cols_for_stats)
+#max games per season for players on multiple teams
+max_games_tots=totals %>% filter(tm=="TOT") %>% group_by(season,lg,tm) %>%
+  summarize(max_games_tot=max(g,na.rm = TRUE)) %>% ungroup()
+#max games per season for players on single team
+max_games=totals %>% filter(tm !="TOT") %>% group_by(season,lg) %>%
+  summarize(max_games_non_tot=max(g,na.rm = TRUE)) %>% ungroup()
+#coalesce above two into one column in totals df
+totals_enhanced=left_join(totals,max_games_tots) %>% left_join(.,max_games) %>%
+  mutate(max_games_playable=coalesce(max_games_tot,max_games_non_tot)) %>% 
+  select(-c(max_games_non_tot,max_games_tot))
+advanced_and_totals<-left_join(totals_enhanced,advanced) %>%
+  #if player played for multiple teams in season, only take total row
   mutate(tm=ifelse(tm=="TOT","1TOT",tm)) %>% 
   group_by(player_id,season) %>% arrange(tm) %>% slice(1) %>% 
-  mutate(tm=ifelse(tm=="1TOT","TOT",tm)) %>% select(seas_id:mp,ows:ws,vorp)
-totals<-read_csv("Player Totals.csv") %>% 
-  mutate(tm=ifelse(tm=="TOT","1TOT",tm)) %>% 
-  group_by(player_id,season) %>% arrange(tm) %>% slice(1) %>% 
-  mutate(tm=ifelse(tm=="1TOT","TOT",tm))
-advanced_and_totals<-inner_join(totals,advanced)
+  mutate(tm=ifelse(tm=="1TOT","TOT",tm)) %>% 
+  arrange(season,player) %>%
+  mutate(g_percent=g/max_games_playable*100,gs_percent=gs/g*100,.before=g) %>% 
+  select(-c(gs,max_games_playable)) %>% 
+  #filter for only last ten years for faster pre-processing
+  filter(season > 2009) %>% ungroup()
 ```
-For the statistical data, I've scraped total and advanced stats from Basketball-Reference and stored them in .csv files. The advanced stats I kept were cumulative (offensive win shares, defensive win shares and value over replacement player). This was actually part of a larger project to scrape complete statistics for teams, players and awards (the Kaggle dataset resides [here](https://www.kaggle.com/sumitrodatta/nba-aba-baa-stats)). To my knowledge, my dataset is unique in that it includes BAA stats and ABA stats, which is not really of use here. For players who played on multiple teams in one season, I kept their total stats and discarded the team-specific season portions.
+
+```{r clean_environ,include=FALSE}
+rm(cols_for_stats,advanced,totals,max_games_tots,max_games,totals_enhanced)
+```
+
+For the statistical data, I've scraped total and advanced stats from Basketball-Reference and stored them in .csv files. The advanced stats I kept were cumulative (offensive win shares, defensive win shares and value over replacement player). This was actually part of a larger project to scrape complete statistics for teams, players and awards (the Kaggle dataset resides [here](https://www.kaggle.com/sumitrodatta/nba-aba-baa-stats)). To my knowledge, my dataset is unique in that it includes BAA stats and ABA stats, which is not really of use here. 
+
+For players who played on multiple teams in one season, I kept their total stats and discarded the team-specific season portions. In the previous iteration of this project, we scaled games played and games started to a normal distribution due to fluctuations in games played between seasons caused by the COVID-19 pandemic. There was an initial desire to use totals to bake in availability/body fragility, but the shortened seasons would cause the model to declare all players to be fragile and underestimate their contract. We will convert the games started to a percentage of games played and we will change the games played to a percentage of maximum playable games. This maximum will differ for players who played for multiple teams in one season.
+
+```{r load_train}
+past_free_agents<-read_csv("2016-2020 Free Agents.csv")
+```
+I've updated the free agents training set from last year to include the 2020 free agents. As a quick refresh:
+
+* removed retired players and players who signed from overseas (wouldn't have any contract year data) from the dataset
+* set contract years to zero and salary to zero for players who:
+    + went overseas (not many, considering the pandemic)
+    + had explicitly non guaranteed first years in their contracts (training camp deals, two ways, ten days, exhibit 10s)
+    + had blanks in their contract terms cell
+* included option years and partially guaranteed years in my calculation of contract years
+    + looked at it as both sides (player and team) intending to see out the contract
+* gathered year 1 salary for remaining players using [Spotrac](https://www.spotrac.com/nba/contracts/), Basketball-Reference or [Basketball-Insiders](http://www.basketballinsiders.com/nba-team-salaries-at-a-glance/):
+    + Capology was previously my main source, but it wasn't updated when I started compiling the 2020 free agents
+    + Spotrac became the new main source as it cost nothing to look at the current year salary
+    + Basketball-Reference has a transaction timeline, which is ideal for players who were waived/played for multiple teams
+    + when all other sources were exhausted, turned to Basketball-Insiders
+* general housekeeping like adding suffixes (Jr., II, III) to certain players to match up with statistical data
+
+```{r load_cap_hist}
+#subtract one from year to match up with offseason in which contract was signed
+salary_cap_hist<-read_csv("Salary Cap History.csv") %>% mutate(season=season-1)
+#create variable of first year salary as percentage of cap
+#easier to compare across years
+past_free_agents<-past_free_agents %>% select(-c(terms,Source)) %>% 
+  left_join(.,salary_cap_hist) %>% 
+  mutate(first_year_percent_of_cap=yr_1_salary/cap) %>% 
+  select(-c(yr_1_salary,cap))
+```
+The next file I used was salary cap history, also from Basketball-Reference. To somewhat normalize comparisons across years, I converted the first year salary to a percentage of the salary cap.
+
+```{r load_eval}
+current_fa<-read_csv("Free Agents 2021.csv")
+#separate out options to compare what players options get if declined
+current_fa_options<-current_fa %>% filter(str_detect(type,"PO|CO"))
+#make player options all declined (UFA's)
+#make club options ufa or rfa depending on exp
+current_fa<-current_fa %>%
+  mutate(new_type=case_when((type=="PO"|(type=="CO" & experience >= 4))~"UFA",
+                        (type=="CO" & experience < 4)~"RFA",
+                        TRUE~type)) %>% 
+  group_by(player) %>% select(-experience) %>% slice(1) %>% ungroup()
+```
+The last file loaded is our evaluation set: the 2021 free agent class, retrieved from Spotrac. Since the deadlines for some option decisions are all the way until August 1 and I wanted to run my models before then, I decided to scrape Spotrac on **June 30** (subject to change based on how fast models can be run). I had to edit this dataset to match the Basketball-Reference names (mainly adding diacritics to European names). In addition, I filtered out players with options. Players who decline player options and players who have their team options declined with more than 3 years of experience become unrestricted free agents. Players with less than or equal to 3 years of experience and a declined team option become restricted free agents. I'll use this fact to see which players & teams might decline their option. 2022 salary amounts of players with options were added manually. 
+
+In the GitHub repository where this project is located, a file called `free agents.r` has more details on exactly how I scraped the train set, evaluation set and the salary cap history.
