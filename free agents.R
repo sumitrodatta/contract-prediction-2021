@@ -35,7 +35,7 @@ free_agents<-anti_join(free_agents,no_contract)
 no_contract<-no_contract %>% mutate(contract_yrs=0,yr_1_salary=0)
 free_agents<-full_join(free_agents,no_contract)
 
-write_csv(prev_free_agents %>% bind_rows(free_agents),"2016-2020 Free Agents.csv")
+write_csv(prev_free_agents %>% bind_rows(free_agents),"Data/2016-2020 Free Agents.csv")
 #capology not updated so checking combo of spotrac, bball-insiders & bbref
 #omari spellman not free agent (traded to nyk from min)
 #juwan morgan not free agent
@@ -67,7 +67,7 @@ fa_2021<-url %>% read_html() %>% html_nodes("table") %>% .[[1]] %>% html_table()
                           TRUE~player)) %>%
   mutate(contract_yrs=NA,first_year_percent_of_cap=NA)
 
-write_csv(fa_2021,"Free Agents 2021.csv")
+write_csv(fa_2021,"Data/Free Agents 2021.csv")
 #add option salary amounts manually
 
 salary_cap_hist_url<-"https://basketball.realgm.com/nba/info/salary_cap"
@@ -82,4 +82,4 @@ salary_cap_hist<-salary_cap_hist %>% select(3:4) %>%
   rename(season=`Luxury Tax`,cap=BAE) %>%
   mutate(season=as.numeric(str_sub(season,start=-4))) %>%
   mutate(cap=parse_number(cap))
-write_csv(salary_cap_hist,"Salary Cap History.csv")
+write_csv(salary_cap_hist,"Data/Salary Cap History.csv")
