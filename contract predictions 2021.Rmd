@@ -34,7 +34,10 @@ if(!require(tidyverse))
   install.packages("tidyverse", repos = "http://cran.us.r-project.org")
 if(!require(tidymodels)) 
   install.packages("tidymodels", repos = "http://cran.us.r-project.org")
-#ranger is random forest algorithm wrappers
+#for cleaning variable names
+if(!require(janitor)) 
+  install.packages("janitor", repos = "http://cran.us.r-project.org")
+#ranger is random forest algorithm wrapper
 if(!require(ranger)) 
   install.packages("ranger", repos = "http://cran.us.r-project.org")
 #zoo allows rolling operations
@@ -150,6 +153,68 @@ The last file loaded is our evaluation set: the 2021 free agent class, retrieved
 
 In the GitHub repository where this project is located, a file called `free agents.r` has more details on exactly how I scraped the train set, evaluation set and the salary cap history.
 
+## Retrospective on Last Year's Results
+
+Before getting into pre-processing, we'll take a look at last year's results and see how the algorithms performed. We remove players who ended up not hitting the market due to them picking up their player option. Any player who was predicted but didn't end up in the free agent history must not have received a contract, so their NA's were replaced with zeroes.
+
+```{r last_years_results_load, echo=FALSE}
+non_options=read_csv("https://raw.githubusercontent.com/sumitrodatta/contract-prediction-2020/master/Non-Option%20Contracts.csv")
+options=read_csv("https://raw.githubusercontent.com/sumitrodatta/contract-prediction-2020/master/Options.csv")
+combined_predictions=bind_rows(non_options,options) %>% 
+  clean_names() %>% 
+  #take out totals since based on $115M cap
+  select(-starts_with("total")) %>% 
+  #convert option amount to percent of cap for consistency
+  mutate(x2021_option_cap_percent=x2021_option/109.14) %>%
+  select(-x2021_option) %>% 
+  #join predictions with actual
+  left_join(.,past_free_agents %>% filter(season==2020)) %>%
+  select(-c(season,ws)) %>% 
+  #filter out players who picked up player option
+  filter(!(!is.na(x2021_option_cap_percent) & is.na(contract_yrs))) %>%
+  replace_na(list(type="UFA",contract_yrs=0,first_year_percent_of_cap=0)) %>%
+  mutate(contract_yrs=as.factor(contract_yrs),yrs_y1s2=as.factor(yrs_y1s2),
+         yrs_s1y2=factor(yrs_s1y2,levels=0:5))
+rm(non_options,options)
+```
+
+```{r accuracy,echo=FALSE}
+y1s2_yr_acc=round(accuracy(combined_predictions,truth=contract_yrs,estimate=yrs_y1s2) %>% pull(.estimate)*100,2)
+s1y2_yr_acc=round(accuracy(combined_predictions,truth=contract_yrs,estimate=yrs_s1y2) %>% pull(.estimate)*100,2)
+```
+
+The accuracy of the years-first model was `r y1s2_yr_acc`%, while the accuracy of the salary-first model was `r s1y2_yr_acc`%. Here's some confusion matrices on how each model handled the prediction of contract years.
+
+```{r years_confusion_matrix,echo=FALSE}
+combined_predictions %>%
+  conf_mat(data=.,truth=contract_yrs,estimate=yrs_y1s2) %>%
+  autoplot(type="heatmap") + 
+  ggtitle("Actual Contract Years vs Predicted Contract Years from Years-First Model")
+combined_predictions %>%
+  conf_mat(data=.,truth=contract_yrs,estimate=yrs_s1y2) %>%
+  autoplot(type="heatmap") + 
+  ggtitle("Actual Contract Years vs Predicted Contract Years from Salary-First Model")
+```
+
+```{r last_yr_results}
+rmse(combined_predictions,truth=first_year_percent_of_cap,estimate=y1s2_cap_percent)
+rmse(combined_predictions,truth=first_year_percent_of_cap,estimate=s1y2_cap_percent)
+```
+```{r last_yr_extreme_misses}
+combined_predictions %>% 
+  mutate(abs_error_y1s2_yrs=abs(as.numeric(contract_yrs)-as.numeric(yrs_y1s2))) %>% 
+  slice_max(abs_error_y1s2_yrs,n=5)
+combined_predictions %>% 
+  mutate(abs_error_s1y2_yrs=abs(as.numeric(contract_yrs)-as.numeric(yrs_s1y2))) %>% 
+  slice_max(abs_error_s1y2_yrs,n=5)
+combined_predictions %>% 
+  mutate(abs_error_s1y2_salary=abs(first_year_percent_of_cap - s1y2_cap_percent)) %>% 
+  slice_max(abs_error_s1y2_salary,n=5)
+combined_predictions %>% 
+  mutate(abs_error_y1s2_salary=abs(first_year_percent_of_cap - y1s2_cap_percent)) %>% 
+  slice_max(abs_error_y1s2_salary,n=5)
+```
+
 ## Pre-Processing
 
 ```{r pre_process}
@@ -212,6 +277,7 @@ I removed categories that were linear combinations of one another. For example, 
 Before we train models, let's see how some of the predictors and some of the targets interact.
 First, let's see how our targets correlate with each other. I've created a box and whisker plot, as well as added the points themselves in a transparent layer with some random variation to differentiate between points.
 ```{r targets_corr, echo=FALSE, fig.align='center',out.width="100%"}
+set.seed(1) #to make jitter reproducible
 yrs_vs_sal=past_free_agents %>% 
   ggplot(aes(x=factor(contract_yrs),y=first_year_percent_of_cap)) + 
   geom_boxplot() + geom_jitter(alpha=0.1,width=0.2) + 
