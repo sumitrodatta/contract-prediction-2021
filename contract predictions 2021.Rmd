@@ -102,6 +102,8 @@ advanced_and_totals<-left_join(totals_enhanced,advanced) %>%
 rm(cols_for_stats,advanced,totals,max_games_tots,max_games,totals_enhanced)
 ```
 
+\newpage
+
 For the statistical data, I've scraped total and advanced stats from Basketball-Reference and stored them in .csv files. The advanced stats I kept were cumulative (offensive win shares, defensive win shares and value over replacement player). This was actually part of a larger project to scrape complete statistics for teams, players and awards (the Kaggle dataset resides [here](https://www.kaggle.com/sumitrodatta/nba-aba-baa-stats)). To my knowledge, my dataset is unique in that it includes BAA stats and ABA stats, which is not really of use here. 
 
 For players who played on multiple teams in one season, I kept their total stats and discarded the team-specific season portions. In the previous iteration of this project, we scaled games played and games started to a normal distribution due to fluctuations in games played between seasons caused by the COVID-19 pandemic. There was an initial desire to use totals to bake in availability/body fragility, but the shortened seasons would cause the model to declare all players to be fragile and underestimate their contract. We will convert the games started to a percentage of games played and we will change the games played to a percentage of maximum playable games. This maximum will differ for players who played for multiple teams in one season.
@@ -135,6 +137,9 @@ past_free_agents<-past_free_agents %>% select(-c(terms,Source)) %>%
   mutate(first_year_percent_of_cap=yr_1_salary/cap) %>% 
   select(-c(yr_1_salary,cap))
 ```
+
+\newpage
+
 The next file I used was salary cap history, also from Basketball-Reference. To somewhat normalize comparisons across years, I converted the first year salary to a percentage of the salary cap.
 
 ```{r load_eval}
@@ -183,30 +188,43 @@ y1s2_yr_acc=round(accuracy(combined_predictions,truth=contract_yrs,estimate=yrs_
 s1y2_yr_acc=round(accuracy(combined_predictions,truth=contract_yrs,estimate=yrs_s1y2) %>% pull(.estimate)*100,2)
 ```
 
-The accuracy of the years-first model was `r y1s2_yr_acc`%, while the accuracy of the salary-first model was `r s1y2_yr_acc`%. Here's some confusion matrices on how each model handled the prediction of contract years.
+The years accuracy of the years-first model was `r y1s2_yr_acc`%, while the years accuracy of the salary-first model was `r s1y2_yr_acc`%. Here's some confusion matrices on how each model handled the prediction of contract years.
 
-```{r years_confusion_matrix,echo=FALSE}
-combined_predictions %>%
+```{r years_confusion_matrix,fig.show='hold',out.width="50%"}
+y1_yr_heatmap=combined_predictions %>%
   conf_mat(data=.,truth=contract_yrs,estimate=yrs_y1s2) %>%
-  autoplot(type="heatmap") + 
+  autoplot(type="heatmap") +
   ggtitle("Actual Contract Years vs Predicted Contract Years from Years-First Model")
-combined_predictions %>%
+ggsave(filename = "Images/Years Predict v Actual, Y1S2 Model.png",plot=y1_yr_heatmap)
+s1_yr_heatmap=combined_predictions %>%
   conf_mat(data=.,truth=contract_yrs,estimate=yrs_s1y2) %>%
-  autoplot(type="heatmap") + 
+  autoplot(type="heatmap") +
   ggtitle("Actual Contract Years vs Predicted Contract Years from Salary-First Model")
+ggsave(filename = "Images/Years Predict v Actual, S1Y2 Model.png",plot=s1_yr_heatmap)
+knitr::include_graphics("Images/Years Predict v Actual, Y1S2 Model.png")
+knitr::include_graphics("Images/Years Predict v Actual, S1Y2 Model.png")
 ```
+The incorrect predictions were skewed toward predicting more years than received as evidenced by the sum of the lower triangle being greater than the upper triangle (models forecasting one year contracts for players who didn't receive a contract, two years for players who got one year, etc).
 
+Here are the worst misses for both models.
+
+```{r last_yr_extreme_yr_misses,echo=FALSE}
+combined_predictions %>% 
+  mutate(abs_error_y1s2_yrs=abs(as.numeric(contract_yrs)-as.numeric(yrs_y1s2))) %>% 
+  slice_max(abs_error_y1s2_yrs,n=5) %>% select(player,yrs_y1s2,contract_yrs) %>% kable()
+combined_predictions %>% 
+  mutate(abs_error_s1y2_yrs=abs(as.numeric(contract_yrs)-as.numeric(yrs_s1y2))) %>% 
+  slice_max(abs_error_s1y2_yrs,n=5) %>% select(player,yrs_s1y2,contract_yrs) %>% kable()
+```
+Gray, Eubanks & Cheatham were all deemed out-of-the-league material by both models, but the trio ended up securing 3 year contracts. Gray & Cheatham actually signed their contracts so they could be used as salary filler in the [4-team trade that sent Jrue Holiday to Milwaukee](https://www.nba.com/news/pelicans-acquire-steven-adams-eric-bledsoe-in-4-team-trade-jrue-holiday-to-milwaukee) that sent the pair to the Oklahoma City Thunder. Gray and Cheatham were eventually waived a week after the trade. Eubanks was a bit player in the San Antonio Spurs rotation, averaging 14.4 minutes (12th on the team) & 5.8 points (10th). McLaughlin and Maker were the opposite: predicted to land 3-year contracts and not receiving any full offers. McLaughlin re-signed on a two-way contract with the Minnesota Timberwolves. Maker signed an Exhibit 10 contract with the Cleveland Cavaliers and ended up making the opening night roster, but he was waived after 8 games. Konchar was surprisingly locked up to a 4-year, \$ 9M contract by the Memphis Grizzlies when the salary-first model only had him getting a single year.
+
+Let's shift our focus to the salary predictions.
 ```{r last_yr_results}
 rmse(combined_predictions,truth=first_year_percent_of_cap,estimate=y1s2_cap_percent)
 rmse(combined_predictions,truth=first_year_percent_of_cap,estimate=s1y2_cap_percent)
 ```
+
 ```{r last_yr_extreme_misses}
-combined_predictions %>% 
-  mutate(abs_error_y1s2_yrs=abs(as.numeric(contract_yrs)-as.numeric(yrs_y1s2))) %>% 
-  slice_max(abs_error_y1s2_yrs,n=5)
-combined_predictions %>% 
-  mutate(abs_error_s1y2_yrs=abs(as.numeric(contract_yrs)-as.numeric(yrs_s1y2))) %>% 
-  slice_max(abs_error_s1y2_yrs,n=5)
 combined_predictions %>% 
   mutate(abs_error_s1y2_salary=abs(first_year_percent_of_cap - s1y2_cap_percent)) %>% 
   slice_max(abs_error_s1y2_salary,n=5)
