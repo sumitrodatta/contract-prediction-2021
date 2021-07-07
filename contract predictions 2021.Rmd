@@ -179,7 +179,8 @@ combined_predictions=bind_rows(non_options,options) %>%
   filter(!(!is.na(x2021_option_cap_percent) & is.na(contract_yrs))) %>%
   replace_na(list(type="UFA",contract_yrs=0,first_year_percent_of_cap=0)) %>%
   mutate(contract_yrs=as.factor(contract_yrs),yrs_y1s2=as.factor(yrs_y1s2),
-         yrs_s1y2=factor(yrs_s1y2,levels=0:5))
+         yrs_s1y2=factor(yrs_s1y2,levels=0:5)) %>%
+  mutate(across(contains("cap"),~round(.,digits=4)))
 rm(non_options,options)
 ```
 
@@ -218,20 +219,60 @@ combined_predictions %>%
 ```
 Gray, Eubanks & Cheatham were all deemed out-of-the-league material by both models, but the trio ended up securing 3 year contracts. Gray & Cheatham actually signed their contracts so they could be used as salary filler in the [4-team trade that sent Jrue Holiday to Milwaukee](https://www.nba.com/news/pelicans-acquire-steven-adams-eric-bledsoe-in-4-team-trade-jrue-holiday-to-milwaukee) that sent the pair to the Oklahoma City Thunder. Gray and Cheatham were eventually waived a week after the trade. Eubanks was a bit player in the San Antonio Spurs rotation, averaging 14.4 minutes (12th on the team) & 5.8 points (10th). McLaughlin and Maker were the opposite: predicted to land 3-year contracts and not receiving any full offers. McLaughlin re-signed on a two-way contract with the Minnesota Timberwolves. Maker signed an Exhibit 10 contract with the Cleveland Cavaliers and ended up making the opening night roster, but he was waived after 8 games. Konchar was surprisingly locked up to a 4-year, \$ 9M contract by the Memphis Grizzlies when the salary-first model only had him getting a single year.
 
-Let's shift our focus to the salary predictions.
-```{r last_yr_results}
-rmse(combined_predictions,truth=first_year_percent_of_cap,estimate=y1s2_cap_percent)
-rmse(combined_predictions,truth=first_year_percent_of_cap,estimate=s1y2_cap_percent)
-```
+Let's shift our focus to the salary predictions. First, the residual mean squared errors.
+```{r last_yr_results,echo=FALSE}
+y1_rmse=rmse(combined_predictions,
+             truth=first_year_percent_of_cap,
+             estimate=y1s2_cap_percent) %>% 
+  pull(.estimate)
+s1_rmse=rmse(combined_predictions,
+             truth=first_year_percent_of_cap,
+             estimate=s1y2_cap_percent) %>%
+  pull(.estimate)
 
-```{r last_yr_extreme_misses}
-combined_predictions %>% 
-  mutate(abs_error_s1y2_salary=abs(first_year_percent_of_cap - s1y2_cap_percent)) %>% 
-  slice_max(abs_error_s1y2_salary,n=5)
+tribble(
+  ~model,~rmse,
+  "Years-First",y1_rmse,
+  "Salary-First",s1_rmse
+) %>% kable()
+```
+The salary-first model has a lower RMSE than the the years-first model when predicting salary.
+
+As we did with the years models, let's look at the most extreme salary misses.
+
+```{r last_yr_extreme_sal_misses}
 combined_predictions %>% 
   mutate(abs_error_y1s2_salary=abs(first_year_percent_of_cap - y1s2_cap_percent)) %>% 
-  slice_max(abs_error_y1s2_salary,n=5)
+  slice_max(abs_error_y1s2_salary,n=10) %>%
+  select(player,y1s2_cap_percent,first_year_percent_of_cap) %>% kable()
+combined_predictions %>% 
+  mutate(abs_error_s1y2_salary=abs(first_year_percent_of_cap - s1y2_cap_percent)) %>% 
+  slice_max(abs_error_s1y2_salary,n=10) %>% 
+  select(player,s1y2_cap_percent,first_year_percent_of_cap) %>% kable()
 ```
+Harrell, Gasol & Ibaka seemingly took less money in exchange for a greater shot at a championship ring. Ibaka went to the Los Angeles Clippers, while Gasol joined the Los Angeles Lakers. Harrell actually didn't even change cities, swapping Clipper blue for Laker purple across the hall. Anthony returned to Portland, repaying the faith the Trail Blazers showed in him when they extended a contract offer to him during the 2020 season. Whiteside didn't receive any competitive offers with his reputation as an "empty-stats" player, and returned to his old stomping grounds in Sacramento with a near-minimum contract in hand. Upon further research, Korkmaz actually wasn't a free agent, having signed a 2-year contract in 2019. Dragić received a "legacy" contract from the Miami Heat, a 2-year balloon deal to thank him for his years of service with a team option on the 2nd year to maintain flexibility. Robinson signing with the Sacramento Kings on a 1-year, \$ 2M contract was surprising, as his potential as a rangy 3 & D wing should have enticed championship contenders.
+
+On a more positive note, here's some players on which the models were very close on.
+
+```{r last_yr_extreme_sal_close}
+combined_predictions %>% filter(contract_yrs %in% c(1:5) & yrs_y1s2 %in% c(1:5)) %>%
+  mutate(abs_error_y1s2_salary=abs(first_year_percent_of_cap - y1s2_cap_percent)) %>% 
+  slice_min(abs_error_y1s2_salary,n=10) %>%
+  select(player,y1s2_cap_percent,first_year_percent_of_cap) %>% kable()
+combined_predictions %>% filter(contract_yrs %in% c(1:5) & yrs_y1s2 %in% c(1:5)) %>%
+  mutate(abs_error_s1y2_salary=abs(first_year_percent_of_cap - s1y2_cap_percent)) %>% 
+  slice_min(abs_error_s1y2_salary,n=10) %>% 
+  select(player,s1y2_cap_percent,first_year_percent_of_cap) %>% kable()
+```
+12 of the 20 closest predictions were for contracts that took up less than 5% of the salary cap. Notes on the remaining 8:
+
+* Davis & Ingram re-signed on maximum contract extensions
+* VanVleet epitomized the Toronto Raptors' challenging 2020 season in their makeshift home of Tampa Bay, exhibiting both peaks (a career- & franchise-high 54 points against the Orlando Magic in February) as well as valleys (shooting a league-worst 38.9% from the field for the entire season)
+* Clarkson was a scoring machine off the bench for the Utah Jazz, eventually winning the Sixth Man of the Year award
+* Boucher broke out, receiving votes for both the Sixth Man of the Year & the Most Improved Player awards and earning the nickname "Block Quebecois" for his ferocious shot-swatting prowess
+* Bradley signed a 2-year deal with the Miami Heat with the expectation of being a defensive pest off the bench, but his season was beset by injuries and he was eventually traded to the Houston Rockets as part of a package to land Victor Oladipo
+* Millsap provided a steady veteran presence to the Denver Nuggets, ceding minutes to young up-and-coming forward Michael Porter Jr. as well as trade deadline acquisition Aaron Gordon. This reduced role resulted in Millsap's scoring average falling below 10 points for the first time in thirteen seasons.
+* Poeltl began the season on the bench for the San Antonio Spurs before being thrust into the starting lineup after the Spurs agreed to a buyout with LaMarcus Aldridge. He averaged career highs across the board, including minutes per game (26.7), rebounds per game (7.9) and points per game (8.6).
 
 ## Pre-Processing
 
