@@ -54,7 +54,10 @@ fa_2021<-url %>% read_html() %>% html_nodes("table") %>% .[[1]] %>% html_table()
   separate(Player,into=c('to_discard','player'),sep='\\s{2,100}') %>% select(-to_discard) %>%
   arrange(player) %>% clean_names() %>% 
   mutate(player=case_when(str_detect(player,'Boban')~'Boban Marjanović',
+                          str_detect(player,'Brown Jr.')~'Bruce Brown',
+                          str_detect(player,'Cam R')~'Cameron Reynolds',
                           str_detect(player,'Cristiano')~'Cristiano Felício',
+                          str_detect(player,'DJ W')~'D.J. Wilson',
                           str_detect(player,'Ersan')~'Ersan İlyasova',
                           str_detect(player,'Goran')~'Goran Dragić',
                           str_detect(player,'Ishmael')~'Ish Smith',
@@ -63,6 +66,7 @@ fa_2021<-url %>% read_html() %>% html_nodes("table") %>% .[[1]] %>% html_table()
                           str_detect(player,'Nicolo')~'Nicolò Melli',
                           str_detect(player,'Otto')~'Otto Porter',
                           str_detect(player,'Patrick Mills')~'Patty Mills',
+                          str_detect(player,'TJ L')~'T.J. Leaf',
                           str_detect(player,'Willy Hernan')~'Willy Hernangómez',
                           TRUE~player)) %>%
   mutate(contract_yrs=NA,first_year_percent_of_cap=NA)
