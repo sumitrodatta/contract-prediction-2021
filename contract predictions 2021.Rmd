@@ -43,6 +43,9 @@ if(!require(glmnet))
 #ranger is random forest algorithm wrapper
 if(!require(ranger)) 
   install.packages("ranger", repos = "http://cran.us.r-project.org")
+#kernlab is svm kernel wrapper
+if(!require(kernlab)) 
+  install.packages("kernlab", repos = "http://cran.us.r-project.org")
 #for variable importance
 if(!require(vip)) 
   install.packages("vip", repos = "http://cran.us.r-project.org")
@@ -474,3 +477,119 @@ yr1_recipe=recipe(contract_yrs~.,data=train_set) %>%
   update_role(seas_id:player,new_role="id") %>% 
   step_rm(first_year_percent_of_cap) %>% step_dummy(type)
 ```
+
+First up is the multinomial regression model.
+```{r multinom_yrs_indep}
+y1_model=multinom_reg(penalty=0) %>% set_engine("glmnet") %>% set_mode("classification")
+wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
+tuning=wf %>% tune_grid(resamples=cv,metrics=metric_set(accuracy))
+wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+multinom_fit=fit(wf,train_set)
+```
+
+Let's get the most important variables of the multinomial model.
+
+```{r multinom_top_vars,echo=FALSE}
+vip(pull_workflow_fit(multinom_fit),scale=TRUE)
+```
+Effective field goal percentage & field goal percentage in both their current-year & last three-years forms comprise the top 4 most important variables.
+
+Next up is the k-nearest neighbors model.
+```{r knn_yrs_indep}
+y1_model=nearest_neighbor(neighbors = tune()) %>% 
+  set_engine("kknn") %>% set_mode("classification")
+wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
+tuning=wf %>% tune_grid(resamples=cv,
+                        grid=expand.grid(neighbors=5:50),
+                        metrics=metric_set(accuracy))
+wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+knn_fit=fit(wf,train_set)
+tuning %>% select_best(metric="accuracy") %>% knitr::kable()
+```
+
+Looks like the best knn model is right in the middle of the tune grid with using the 26 closest comparable players.
+
+The next model is the decision tree model. We can tune the cost complexity parameter (cp) in this model. CP is the minimum for how much the residual sum of squares must improve for another partition to be added. A CP that is too high will have too few branches, while a CP that is too low will be difficult to follow since there are many branches. We lean towards the lower end of the spectrum. We will also change the min_n, which is the minimum number of data points in a node that are required for the node to be split further. The default is 20, but the 5-year portion of the dataset is small, so we will decrease min_n to 1. Since there exists an element of randomness in choosing samples to model a decision tree, we need to set a seed to keep the work reproducible.
+```{r decision_tree_yrs_indep}
+set.seed(100,sample.kind = "Rounding")
+y1_model=decision_tree(cost_complexity = tune(),min_n=tune()) %>% 
+  set_engine("rpart") %>% set_mode("classification")
+wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
+tuning=wf %>% tune_grid(resamples=cv,
+                        grid=expand.grid(cost_complexity=seq(0.01,0.05,by=0.01),
+                                         min_n=seq(1:10)),
+                        metrics=metric_set(accuracy))
+wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+decision_tree_fit=fit(wf,train_set)
+tuning %>% select_best(metric="accuracy") %>% knitr::kable()
+```
+
+Let's get the most important variables of the decision_tree model.
+
+```{r decision_tree_top_vars,echo=FALSE}
+vip(pull_workflow_fit(decision_tree_fit),scale=TRUE)
+```
+The individual contract-year components of the holistic advanced stat of win shares rank within the top-4 most important variables. Durability and availabilty are also highly desirable characteristics, as evidenced by the high values of contract-year minutes per game, contract-year games played percentage and last-3-years games played percentage.
+
+```{r decision_tree, echo=FALSE, fig.align='center'}
+rpart.plot(pull_workflow_fit(decision_tree_fit)$fit)
+```
+The decision tree does not predict any 3-year or 5-year contracts, which is ... not ideal to say the least.
+
+The decision tree maximizes its prediction when a player does all of the following:
+
+* has defensive win shares above 0.55 in the contract year
+* plays more than 24 minutes per game in the contract year
+* has a value over replacement player above 0.85
+
+The next model is a random forest. Since `ranger` is a *random* forest algorithm, we need to set a seed to keep the work reproducible.
+
+Random forest algorithms require an explicit call for variable importance, so we'll ask for permutation importance. A simplified explanation for permutation importance is shuffling a predictor's values and seeing how much the error increases. As a predictor's importance increases, it is difficult for the rest of the model to compute accurate predictions without it. There are 3 tuning parameters:
+
+* trees is the number of decision trees to create
+    + the default is 500, which we'll keep
+* mtry is the number of variables to split at each decision node
+    + the default is the rounded square root of the number of variables, which in this case would be `round(sqrt(55))`
+    + we will try all integers between 5 & 10
+* min_n is the same as the decision tree
+    + the default is 1 for a classification problem like this, which we'll keep
+    
+```{r rand_forest_yrs_indep}
+set.seed(100,sample.kind = "Rounding")
+y1_model=rand_forest(mtry = tune()) %>% 
+  set_engine("ranger",importance="permutation") %>% set_mode("classification")
+wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
+tuning=wf %>% tune_grid(resamples=cv,
+                        grid=expand.grid(mtry=5:10),
+                        metrics=metric_set(accuracy))
+wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+rand_forest_fit=fit(wf,train_set)
+tuning %>% select_best(metric="accuracy") %>% knitr::kable()
+```
+
+```{r rand_forest_top_vars,echo=FALSE}
+vip(pull_workflow_fit(rand_forest_fit),scale=TRUE)
+```
+
+Finally, we train the support vector machine on the model. There are two tuning parameters:
+
+* rbf_sigma: determines how well to fit the training data (higher=fit closer to training)
+    + with a high sigma, every workaday big with middling stats might be predicted to get close to Mozgov money
+* cost: tradeoff between smoothness of boundaries and correct classification
+    + with a high cost, leads to too wiggly of a boundary, and might not generalize to test sets
+    + tests using C=0.25, C=0.5 and C=1
+    
+```{r svm_yrs_indep}
+set.seed(100,sample.kind = "Rounding")
+y1_model=svm_rbf(rbf_sigma=tune(),cost=tune()) %>% 
+  set_engine("kernlab") %>% set_mode("classification")
+wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
+tuning=wf %>% tune_grid(resamples=cv,
+                        grid=expand.grid(rbf_sigma=0.1^seq(2:5),
+                                         cost=c(0.25,0.5,1)),
+                        metrics=metric_set(accuracy))
+wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+svm_fit=fit(wf,train_set)
+tuning %>% select_best(metric="accuracy") %>% knitr::kable()
+```
+Unfortunately, there is no concept of variable importance for an SVM model.
