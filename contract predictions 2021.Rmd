@@ -37,9 +37,15 @@ if(!require(tidymodels))
 #for cleaning variable names
 if(!require(janitor)) 
   install.packages("janitor", repos = "http://cran.us.r-project.org")
+#for multinomial regression
+if(!require(glmnet)) 
+  install.packages("glmnet", repos = "http://cran.us.r-project.org")
 #ranger is random forest algorithm wrapper
 if(!require(ranger)) 
   install.packages("ranger", repos = "http://cran.us.r-project.org")
+#for variable importance
+if(!require(vip)) 
+  install.packages("vip", repos = "http://cran.us.r-project.org")
 #zoo allows rolling operations
 if(!require(zoo))
   install.packages("zoo", repos = "http://cran.us.r-project.org")
@@ -375,7 +381,9 @@ create_data<-function(x){
     mutate(across(mp_last_3_yrs:pts_last_3_yrs,list(per_game=~./g_last_3_yrs)),
            .after="gs_percent_last_3_yrs") %>%
     select(-c(g_last_3_yrs,mp_last_3_yrs:pts_last_3_yrs,ws_last_3_yrs)) %>% 
-    ungroup() %>% mutate(contract_yrs=factor(contract_yrs,levels = 0:5))
+    ungroup() %>% mutate(contract_yrs=factor(contract_yrs,levels = 0:5)) %>%
+    replace_na(list(fg_percent=0,x3p_percent=0,x2p_percent=0,
+                    e_fg_percent=0,ft_percent=0))
   return(a)
 }
 ```
@@ -401,9 +409,12 @@ I removed categories that were linear combinations of one another. For example, 
 
 I changed contract years from a numeric column to a factor/category column. This changes its prediction from a regression problem to a classification problem. A 2.5-year contract makes no sense, so it is in our best interest to discretize the years and store them as factors rather than round a regression result.
 
+The final step was to replace missing values in the shooting percentages with zeroes. These NA's were originally due to lack of attempts.
+
 ```{r train_and_eval_sets}
 train_set<-create_data(past_free_agents)
 eval_set<-create_data(current_fa)
+rm(advanced_and_totals,past_free_agents)
 ```
 Since the models depend on contract year stats, these players were removed from the evaluation set:
 ```{r removed, echo=FALSE}
@@ -411,6 +422,7 @@ anti_join(current_fa,eval_set) %>%
   select(player,type) %>% knitr::kable() %>%
   kable_styling(latex_options = "HOLD_position",fixed_thead = T) %>% row_spec(0,bold=T)
 ```
+
 ## Training Models
 
 There is no need for a subset of the training set to be withheld as a test set before running the models on the evaluation set, because there is built-in cross validation. In the previous iteration of this project, I utilized leave-one-out cross validation since the dataset is relatively small (<1000 observations).  How this works is that the model is run excluding one observation. Then, the model attempts to predict the result of that excluded observation. This is repeated for every observation. However, on this run, I've decided to use k-fold cross validation. I'm hoping to get similar or even better results while cutting down significantly on training time.
@@ -443,8 +455,22 @@ I used a total of six models.
 knitr::include_graphics("Images/SVM2.png")
 ```
 
-With caret, everything could be thrown into the train function: cross-validation, tuning, data, etc. Tidymodels is more explicit in its steps. We'll start off with common steps across all models. The standard 10-fold cross validation is how the data is going to be resampled. In addition, we'll stratify selection, so there is sufficient data to predict all contract year lengths. A hypothetical (albeit unlikely) scenario that could occur without stratification is a fold could include all instances of restricted free agents (which are more rare) in the test portion, and none in the train portion. The chosen algorithm would be confused as to how to predict something for which it has no training.
+```{r actual_values,include=FALSE}
+actual_values=train_set %>% 
+  select(1:4,contract_yrs,first_year_percent_of_cap)
+```
 
-```{r common_steps}
+### Predicting Years First, then Salary
+
+We'll start by predicting years first and then salary with years as an input.
+
+With caret, everything could be thrown into the train function: cross-validation, tuning, data, etc. Tidymodels is more explicit in its steps. The standard 10-fold cross validation is how the data is going to be resampled. In addition, we'll stratify selection, so there is sufficient data to predict all contract year lengths. A hypothetical (albeit unlikely) scenario that could occur without stratification is a fold could include all instances of restricted free agents (which are more rare) in the test portion, and none in the train portion. The chosen algorithm would be confused as to how to predict something for which it has no training.
+
+Recipes is tidymodels' pre-processing package. The first step to change the roles of some variables. The season_id, season, player_id & player variables are of no use as predictors, but are useful to identify observations, so they are given the "id" role. Since we are predicting years first, the first_year_percent_of_cap variable will be removed. Finally, we will convert the free agent type column to a numeric column.
+
+```{r y1_steps}
 cv=vfold_cv(train_set,v=10,strata=type)
+yr1_recipe=recipe(contract_yrs~.,data=train_set) %>% 
+  update_role(seas_id:player,new_role="id") %>% 
+  step_rm(first_year_percent_of_cap) %>% step_dummy(type)
 ```
