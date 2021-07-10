@@ -145,14 +145,16 @@ The next file I used was salary cap history, also from Basketball-Reference. To 
 ```{r load_eval}
 current_fa<-read_csv("Data/Free Agents 2021.csv")
 #separate out options to compare what players options get if declined
-current_fa_options<-current_fa %>% filter(str_detect(type,"PO|CO"))
+current_fa_options<-current_fa %>% filter(str_detect(type,"PO|CO")) %>% 
+  select(-experience)
 #make player options all declined (UFA's)
 #make club options ufa or rfa depending on exp
 current_fa<-current_fa %>%
-  mutate(new_type=case_when((type=="PO"|(type=="CO" & experience >= 4))~"UFA",
+  mutate(type=case_when((type=="PO"|(type=="CO" & experience >= 4))~"UFA",
                         (type=="CO" & experience < 4)~"RFA",
                         TRUE~type)) %>% 
-  group_by(player) %>% select(-experience) %>% slice(1) %>% ungroup()
+  group_by(player) %>% select(-experience) %>% slice(1) %>% ungroup() %>% 
+  mutate(first_year_percent_of_cap=NA)
 ```
 The last file loaded is our evaluation set: the 2021 free agent class, retrieved from Spotrac. Since the deadlines for some option decisions are all the way until August 1 and I wanted to run my models before then, I decided to scrape Spotrac on **June 30** (subject to change based on how fast models can be run). I had to edit this dataset to match the Basketball-Reference names (mainly adding diacritics to European names). In addition, I filtered out players with options. Players who decline player options and players who have their team options declined with more than 3 years of experience become unrestricted free agents. Players with less than or equal to 3 years of experience and a declined team option become restricted free agents. I'll use this fact to see which players & teams might decline their option. 2022 salary amounts of players with options were added manually. 
 
@@ -274,6 +276,72 @@ combined_predictions %>% filter(contract_yrs %in% c(1:5) & yrs_y1s2 %in% c(1:5))
 * Millsap provided a steady veteran presence to the Denver Nuggets, ceding minutes to young up-and-coming forward Michael Porter Jr. as well as trade deadline acquisition Aaron Gordon. This reduced role resulted in Millsap's scoring average falling below 10 points for the first time in thirteen seasons.
 * Poeltl began the season on the bench for the San Antonio Spurs before being thrust into the starting lineup after the Spurs agreed to a buyout with LaMarcus Aldridge. He averaged career highs across the board, including minutes per game (26.7), rebounds per game (7.9) and points per game (8.6).
 
+```{r remove_retrospective_vars,include=FALSE}
+rm(y1_rmse,s1_rmse,y1_yr_heatmap,s1_yr_heatmap,s1y2_yr_acc,y1s2_yr_acc,combined_predictions)
+```
+
+## Data Exploration and Visualizations
+
+Before we train models, let's see how some of the predictors and some of the targets interact.
+First, let's see how our targets correlate with each other. I've created a box and whisker plot, as well as added the points themselves in a transparent layer with some random variation to differentiate between points.
+```{r targets_corr, echo=FALSE, fig.align='center',out.width="100%"}
+set.seed(1) #to make jitter reproducible
+yrs_vs_sal=past_free_agents %>% 
+  ggplot(aes(x=factor(contract_yrs),y=first_year_percent_of_cap)) + 
+  geom_boxplot() + geom_jitter(alpha=0.1,width=0.2) + 
+  labs(x="Contract Years",y="First Year Cap %") +
+  scale_y_continuous(labels = scales::percent) +
+  annotate("text",x=1.5,y=0.3,label=paste0("Correlation Coeff:\n",round(
+    cor(past_free_agents$contract_yrs,
+    past_free_agents$first_year_percent_of_cap),4))) +
+  dark_theme_gray()
+ggsave(filename = "Images/Contract Years Against First Year Salary.png",plot=yrs_vs_sal,
+       width=7.5,height=3.75,units = "in")
+knitr::include_graphics("Images/Contract Years Against First Year Salary.png")
+```
+
+The correlation coefficient is 0.77, which shows that the two targets are strongly and positively correlated. The median value of the first year cap % (middle line in each box) increases with an increase in contract length. The highest increase in first year cap % is between a 4-year and 5-year contract.
+
+Next, let's see if an all-encompassing advanced statistic has a relationship with first year cap percentage. Win Shares represent how much a player has contributed to his team's wins by comparing his output to a marginal player. Higher win shares generally indicate a better player.
+
+```{r ws_vs_salary, echo=FALSE, fig.align='center',out.width="100%"}
+ws_vs_sal=past_free_agents %>%
+  ggplot(aes(x=first_year_percent_of_cap,y=ws,color=factor(contract_yrs))) + 
+  geom_point() +
+  scale_colour_brewer(palette="RdYlGn") +
+  labs(x="First Year Cap %",y="Win Shares",color="Contract Years") +
+  annotate("text",x=0.05,y=12.5,
+           label=paste0("Correlation Coeff:\n",round(
+             cor(past_free_agents$ws,past_free_agents$first_year_percent_of_cap),4))) +
+  dark_theme_gray()
+ggsave(filename = "Images/Win Shares Against First Year Salary.png",plot=ws_vs_sal,
+       width=7.5,height=3.75,units = "in")
+knitr::include_graphics("Images/Win Shares Against First Year Salary.png")
+```
+With a correlation coefficient of 0.8121, win shares are highly correlated with first year cap percentage. This shouldn't be too groundbreaking: better players get paid more.
+
+Finally, let's see how many contracts of each length were given in each offseason.
+
+```{r contracts_by_season, echo=FALSE, fig.align='center',out.width="100%"}
+contract_per_seas=past_free_agents %>%
+  ggplot(aes(x=factor(season),fill=factor(contract_yrs))) +
+  geom_bar(aes(y=..count../tapply(..count.., ..x.. ,sum)[..x..]), 
+           position="dodge") +
+  labs(x="Season",y="Percent of Contracts Given",fill="Contract Years") +
+  scale_fill_brewer(palette="RdYlGn") +
+  scale_y_continuous(labels = scales::percent) +
+  dark_theme_gray()
+ggsave(filename = "Images/Contract Lengths by Offseason.png",plot=contract_per_seas,
+       width=7.5,height=4,units = "in")
+knitr::include_graphics("Images/Contract Lengths by Offseason.png")
+```
+
+It comes as no surprise that as contract length increases, the percent of contracts of that length given out decreases. Although in 2016, the amount of players who didn't receive contracts was lower than the amount who received 1, 2, or 4 year contracts. 2016 was the year of the cap spike, when the salary cap jumped from \$ 70 million to \$ 94 million. Similar to a lot of people with new-found money, teams spent somewhat recklessly.
+
+```{r clean_plots,include=FALSE}
+rm(yrs_vs_sal,ws_vs_sal,contract_per_seas)
+```
+
 ## Pre-Processing
 
 ```{r pre_process}
@@ -306,10 +374,10 @@ create_data<-function(x){
     select(-c(g,mp,x3p:x3pa,x2p:x2pa,ft:fta,orb:pts,ws)) %>% 
     mutate(across(mp_last_3_yrs:pts_last_3_yrs,list(per_game=~./g_last_3_yrs)),
            .after="gs_percent_last_3_yrs") %>%
-    select(-c(g_last_3_yrs,mp_last_3_yrs:pts_last_3_yrs,ws_last_3_yrs)) %>% ungroup()
+    select(-c(g_last_3_yrs,mp_last_3_yrs:pts_last_3_yrs,ws_last_3_yrs)) %>% 
+    ungroup() %>% mutate(contract_yrs=factor(contract_yrs,levels = 0:5))
   return(a)
 }
-advanced_and_totals_train_set<-create_data(past_free_agents)
 ```
 I used regular season stats, although I do understand that some players get paid on the strength of playoff performance. I started off with contract year stats, because there's anecdotal evidence that players exert more effort in their contract year (*cough cough Hassan Whiteside*). All stats except for the advanced stats (OWS, DWS and VORP) were converted to per game. Percentages were left alone.
 
@@ -331,60 +399,52 @@ I performed the same processing on the three-year totals, using the three-year g
 
 I removed categories that were linear combinations of one another. For example, total rebounds can be found by simply adding up offensive and defensive rebounds. I kept age and experience as predictor variables, but removed position because I felt it would ultimately reflect in the stats themselves.
 
-## Data Exploration and Visualizations
+I changed contract years from a numeric column to a factor/category column. This changes its prediction from a regression problem to a classification problem. A 2.5-year contract makes no sense, so it is in our best interest to discretize the years and store them as factors rather than round a regression result.
 
-Before we train models, let's see how some of the predictors and some of the targets interact.
-First, let's see how our targets correlate with each other. I've created a box and whisker plot, as well as added the points themselves in a transparent layer with some random variation to differentiate between points.
-```{r targets_corr, echo=FALSE, fig.align='center',out.width="100%"}
-set.seed(1) #to make jitter reproducible
-yrs_vs_sal=past_free_agents %>% 
-  ggplot(aes(x=factor(contract_yrs),y=first_year_percent_of_cap)) + 
-  geom_boxplot() + geom_jitter(alpha=0.1,width=0.2) + 
-  labs(x="Contract Years",y="First Year Cap %") +
-  scale_y_continuous(labels = scales::percent) +
-  annotate("text",x=1.5,y=0.3,label=paste0("Correlation Coeff:\n",round(
-    cor(advanced_and_totals_train_set$contract_yrs,
-    advanced_and_totals_train_set$first_year_percent_of_cap),4))) +
-  dark_theme_gray()
-ggsave(filename = "Images/Contract Years Against First Year Salary.png",plot=yrs_vs_sal,
-       width=7.5,height=3.75,units = "in")
-knitr::include_graphics("Images/Contract Years Against First Year Salary.png")
+```{r train_and_eval_sets}
+train_set<-create_data(past_free_agents)
+eval_set<-create_data(current_fa)
+```
+Since the models depend on contract year stats, these players were removed from the evaluation set:
+```{r removed, echo=FALSE}
+anti_join(current_fa,eval_set) %>% 
+  select(player,type) %>% knitr::kable() %>%
+  kable_styling(latex_options = "HOLD_position",fixed_thead = T) %>% row_spec(0,bold=T)
+```
+## Training Models
+
+There is no need for a subset of the training set to be withheld as a test set before running the models on the evaluation set, because there is built-in cross validation. In the previous iteration of this project, I utilized leave-one-out cross validation since the dataset is relatively small (<1000 observations).  How this works is that the model is run excluding one observation. Then, the model attempts to predict the result of that excluded observation. This is repeated for every observation. However, on this run, I've decided to use k-fold cross validation. I'm hoping to get similar or even better results while cutting down significantly on training time.
+
+As we saw in data visualization, the two target variables (contract years and first year salary as a percentage of the salary cap) are fairly well correlated, as they have a Pearson correlation coefficient of 0.77. The way I chose to handle this is:
+
+* predict one target first without the other as a predictor
+* choose the best model (be that a single model or an ensemble of multiple models)
+* use the first target's predictions as an input to predict the second target
+
+One potential problem is compounding errors. If there's an incorrect year prediction, it might lead to an incorrect salary prediction.
+
+### The Models
+
+I used a total of six models.
+
+* linear regression model as a baseline for salary, and multinomial regression as a baseline for years
+    + the separation is due to the classification/regression split
+* k-nearest neighbors model: take the distance between the statistics of two players (the absolute value of the difference) and then take the average of the outcome variable of the k nearest neighbours
+    + the intuition being that similar players get similar contracts
+* decision tree model (`rpart`): maybe as a player passes certain statistical thresholds, their contract increases
+    + only using for predicting the contract years; since there are so many different salary percentages, a solitary decision tree would either be useless or far too complicated
+* random forest model (`ranger`): reduces instability by averaging multiple trees
+    + costs interpretability as there is no tree diagram that is representative of the decisions made
+* support vector machine model: attempt to separate classes with a hyperplane
+    + support vectors are the points closest to the hyperplane, named as such because the hyperplane would change if those points were removed
+    + I believe this image from Wikipedia succinctly explains an SVM
+    
+```{r svm_explain, out.width="50%", fig.cap="H1 does not separate the classes. H2 does, but only with a small margin. H3 separates them with the maximal margin. By User:ZackWeinberg, based on PNG version by User:Cyc - This file was derived from: Svm separating hyperplanes.png, CC BY-SA 3.0, https://commons.wikimedia.org/w/index.php?curid=22877598",echo=FALSE}
+knitr::include_graphics("Images/SVM2.png")
 ```
 
-The correlation coefficient is 0.77, which shows that the two targets are strongly and positively correlated. The median value of the first year cap % (middle line in each box) increases with an increase in contract length. The highest increase in first year cap % is between a 4-year and 5-year contract.
+With caret, everything could be thrown into the train function: cross-validation, tuning, data, etc. Tidymodels is more explicit in its steps. We'll start off with common steps across all models. The standard 10-fold cross validation is how the data is going to be resampled. In addition, we'll stratify selection, so there is sufficient data to predict all contract year lengths. A hypothetical (albeit unlikely) scenario that could occur without stratification is a fold could include all instances of restricted free agents (which are more rare) in the test portion, and none in the train portion. The chosen algorithm would be confused as to how to predict something for which it has no training.
 
-Next, let's see if an all-encompassing advanced statistic has a relationship with first year cap percentage. Win Shares represent how much a player has contributed to his team's wins by comparing his output to a marginal player. Higher win shares generally indicate a better player.
-
-```{r ws_vs_salary, echo=FALSE, fig.align='center',out.width="100%"}
-ws_vs_sal=past_free_agents %>%
-  ggplot(aes(x=first_year_percent_of_cap,y=ws,color=factor(contract_yrs))) + 
-  geom_point() +
-  scale_colour_brewer(palette="RdYlGn") +
-  labs(x="First Year Cap %",y="Win Shares",color="Contract Years") +
-  annotate("text",x=0.05,y=12.5,
-           label=paste0("Correlation Coeff:\n",round(
-             cor(past_free_agents$ws,past_free_agents$first_year_percent_of_cap),4))) +
-  dark_theme_gray()
-ggsave(filename = "Images/Win Shares Against First Year Salary.png",plot=ws_vs_sal,
-       width=7.5,height=3.75,units = "in")
-knitr::include_graphics("Images/Win Shares Against First Year Salary.png")
+```{r common_steps}
+cv=vfold_cv(train_set,v=10,strata=type)
 ```
-With a correlation coefficient of 0.8121, win shares are highly correlated with first year cap percentage. This shouldn't be too groundbreaking: better players get paid more.
-
-Finally, let's see how many contracts of each length were given in each offseason.
-
-```{r contracts_by_season, echo=FALSE, fig.align='center',out.width="100%"}
-contract_per_seas=advanced_and_totals_train_set %>%
-  ggplot(aes(x=factor(season),fill=factor(contract_yrs))) +
-  geom_bar(aes(y=..count../tapply(..count.., ..x.. ,sum)[..x..]), 
-           position="dodge") +
-  labs(x="Season",y="Percent of Contracts Given",fill="Contract Years") +
-  scale_fill_brewer(palette="RdYlGn") +
-  scale_y_continuous(labels = scales::percent) +
-  dark_theme_gray()
-ggsave(filename = "Images/Contract Lengths by Offseason.png",plot=contract_per_seas,
-       width=7.5,height=4,units = "in")
-knitr::include_graphics("Images/Contract Lengths by Offseason.png")
-```
-
-It comes as no surprise that as contract length increases, the percent of contracts of that length given out decreases. Although in 2016, the amount of players who didn't receive contracts was lower than the amount who received 1, 2, or 4 year contracts. 2016 was the year of the cap spike, when the salary cap jumped from \$ 70 million to \$ 94 million. Similar to a lot of people with new-found money, teams spent somewhat recklessly.
