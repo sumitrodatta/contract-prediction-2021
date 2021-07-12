@@ -480,11 +480,30 @@ yr1_recipe=recipe(contract_yrs~.,data=train_set) %>%
 
 First up is the multinomial regression model.
 ```{r multinom_yrs_indep}
-y1_model=multinom_reg(penalty=0) %>% set_engine("glmnet") %>% set_mode("classification")
-wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
-tuning=wf %>% tune_grid(resamples=cv,metrics=metric_set(accuracy))
-wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+  add_model(multinom_reg(penalty=0) %>% 
+              set_engine("glmnet") %>% 
+              set_mode("classification"))
+multinom_tuning=wf %>% tune_grid(resamples=cv,metrics=metric_set(f_meas))
+wf=wf %>% finalize_workflow(multinom_tuning %>% select_best(metric="f_meas"))
 multinom_fit=fit(wf,train_set)
+```
+
+```{r model_table_func,echo=FALSE}
+get_yrs_metrics<-function(model,model_name,tuning_var){
+  f_meas=tuning_var %>% collect_metrics() %>% pull(mean) %>% max(.)
+  contract_yr_predict_vec=predict(model,new_data=train_set) %>% pull()
+  retrain_acc=accuracy_vec(truth=train_set$contract_yrs,
+                           estimate=contract_yr_predict_vec)
+  off_by_more_than_one=sum(abs(as.numeric(as.character(train_set$contract_yrs))-
+                                 as.numeric(as.character(contract_yr_predict_vec)))>1)/
+    length(contract_yr_predict_vec)
+  num_max_yr_predicts=sum(as.numeric(as.character(contract_yr_predict_vec))==5)
+  return(tibble(Method=model_name,"Correct Predict %"=retrain_acc,
+                "Off by >1 Yr"=off_by_more_than_one,
+                "Max Year Predicts"=num_max_yr_predicts,
+                "F1 Score"=f_meas))
+}
 ```
 
 Let's get the most important variables of the multinomial model.
@@ -496,34 +515,33 @@ Effective field goal percentage & field goal percentage in both their current-ye
 
 Next up is the k-nearest neighbors model.
 ```{r knn_yrs_indep}
-y1_model=nearest_neighbor(neighbors = tune()) %>% 
-  set_engine("kknn") %>% set_mode("classification")
-wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
-tuning=wf %>% tune_grid(resamples=cv,
+wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+  add_model(nearest_neighbor(neighbors = tune()) %>% 
+  set_engine("kknn") %>% set_mode("classification"))
+knn_tuning=wf %>% tune_grid(resamples=cv,
                         grid=expand.grid(neighbors=5:50),
-                        metrics=metric_set(accuracy))
-wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+                        metrics=metric_set(f_meas))
+wf=wf %>% finalize_workflow(knn_tuning %>% select_best(metric="f_meas"))
 knn_fit=fit(wf,train_set)
-tuning %>% select_best(metric="accuracy") %>% knitr::kable()
+knn_tuning %>% select_best(metric="f_meas") %>% knitr::kable()
 ```
 
-Looks like the best knn model is right in the middle of the tune grid with using the 26 closest comparable players.
+Looks like the best knn model is near the middle of the tune grid with using 17 closest comparable players.
 
 The next model is the decision tree model. We can tune the cost complexity parameter (cp) in this model. CP is the minimum for how much the residual sum of squares must improve for another partition to be added. A CP that is too high will have too few branches, while a CP that is too low will be difficult to follow since there are many branches. We lean towards the lower end of the spectrum. We will also change the min_n, which is the minimum number of data points in a node that are required for the node to be split further. The default is 20, but the 5-year portion of the dataset is small, so we will decrease min_n to 1. Since there exists an element of randomness in choosing samples to model a decision tree, we need to set a seed to keep the work reproducible.
 ```{r decision_tree_yrs_indep}
 set.seed(100,sample.kind = "Rounding")
-y1_model=decision_tree(cost_complexity = tune(),min_n=tune()) %>% 
-  set_engine("rpart") %>% set_mode("classification")
-wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
-tuning=wf %>% tune_grid(resamples=cv,
-                        grid=expand.grid(cost_complexity=seq(0.01,0.05,by=0.01),
+wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+  add_model(decision_tree(cost_complexity = tune(),min_n=tune()) %>% 
+  set_engine("rpart") %>% set_mode("classification"))
+tree_tuning=wf %>% tune_grid(resamples=cv,
+                        grid=expand.grid(cost_complexity=0.1^seq(2,5),
                                          min_n=seq(1:10)),
-                        metrics=metric_set(accuracy))
-wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+                        metrics=metric_set(f_meas))
+wf=wf %>% finalize_workflow(tree_tuning %>% select_best(metric="f_meas"))
 decision_tree_fit=fit(wf,train_set)
-tuning %>% select_best(metric="accuracy") %>% knitr::kable()
+tree_tuning %>% select_best(metric="f_meas") %>% knitr::kable()
 ```
-
 Let's get the most important variables of the decision_tree model.
 
 ```{r decision_tree_top_vars,echo=FALSE}
@@ -542,6 +560,13 @@ The decision tree maximizes its prediction when a player does all of the followi
 * plays more than 24 minutes per game in the contract year
 * has a value over replacement player above 0.85
 
+Full disclosure: when I included values > 0.1 in tuning the cost complexity, I got a decision tree with one decision (more of a decision stump to be honest): 
+
+* if the contract-year defensive win shares was above 0.55, predict one contract year
+* else, predict zero contract years
+
+While the F1 score was higher is this case, the model is practically useless. This is a refreshing example to hammer home the point that one should never blindly follow a solitary metric.
+
 The next model is a random forest. Since `ranger` is a *random* forest algorithm, we need to set a seed to keep the work reproducible.
 
 Random forest algorithms require an explicit call for variable importance, so we'll ask for permutation importance. A simplified explanation for permutation importance is shuffling a predictor's values and seeing how much the error increases. As a predictor's importance increases, it is difficult for the rest of the model to compute accurate predictions without it. There are 3 tuning parameters:
@@ -556,15 +581,15 @@ Random forest algorithms require an explicit call for variable importance, so we
     
 ```{r rand_forest_yrs_indep}
 set.seed(100,sample.kind = "Rounding")
-y1_model=rand_forest(mtry = tune()) %>% 
-  set_engine("ranger",importance="permutation") %>% set_mode("classification")
-wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
-tuning=wf %>% tune_grid(resamples=cv,
+wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+  add_model(rand_forest(mtry = tune()) %>% 
+  set_engine("ranger",importance="permutation") %>% set_mode("classification"))
+forest_tuning=wf %>% tune_grid(resamples=cv,
                         grid=expand.grid(mtry=5:10),
-                        metrics=metric_set(accuracy))
-wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+                        metrics=metric_set(f_meas))
+wf=wf %>% finalize_workflow(forest_tuning %>% select_best(metric="f_meas"))
 rand_forest_fit=fit(wf,train_set)
-tuning %>% select_best(metric="accuracy") %>% knitr::kable()
+forest_tuning %>% select_best(metric="f_meas") %>% knitr::kable()
 ```
 
 ```{r rand_forest_top_vars,echo=FALSE}
@@ -581,15 +606,17 @@ Finally, we train the support vector machine on the model. There are two tuning 
     
 ```{r svm_yrs_indep}
 set.seed(100,sample.kind = "Rounding")
-y1_model=svm_rbf(rbf_sigma=tune(),cost=tune()) %>% 
-  set_engine("kernlab") %>% set_mode("classification")
-wf=workflow() %>% add_recipe(yr1_recipe) %>% add_model(y1_model)
-tuning=wf %>% tune_grid(resamples=cv,
+wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+  add_model(svm_rbf(rbf_sigma=tune(),cost=tune()) %>% 
+  set_engine("kernlab") %>% set_mode("classification"))
+svm_tuning=wf %>% tune_grid(resamples=cv,
                         grid=expand.grid(rbf_sigma=0.1^seq(2:5),
                                          cost=c(0.25,0.5,1)),
-                        metrics=metric_set(accuracy))
-wf=wf %>% finalize_workflow(tuning %>% select_best(metric="accuracy"))
+                        metrics=metric_set(f_meas))
+wf=wf %>% finalize_workflow(svm_tuning %>% select_best(metric="f_meas"))
 svm_fit=fit(wf,train_set)
-tuning %>% select_best(metric="accuracy") %>% knitr::kable()
+svm_tuning %>% select_best(metric="f_meas") %>% knitr::kable()
 ```
 Unfortunately, there is no concept of variable importance for an SVM model.
+
+Let's look at some performance metrics, and see which models we want to take along as inputs for predicting salary. Initially, accuracy was chosen as the metric to determine the best submodel by cross-validation. However, with the inherent imbalance of the outcome classes, the F1 score is a better metric. As an extreme example, if there were only two classes with a 90:10 split, a classifier could achieve 90% accuracy by simply predicting the more populous class for every case. On the other hand, the F1 score attempts to minimize both false positives & false negatives.
