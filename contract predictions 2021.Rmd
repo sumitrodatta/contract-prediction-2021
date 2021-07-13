@@ -111,8 +111,6 @@ advanced_and_totals<-left_join(totals_enhanced,advanced) %>%
 rm(cols_for_stats,advanced,totals,max_games_tots,max_games,totals_enhanced)
 ```
 
-\newpage
-
 For the statistical data, I've scraped total and advanced stats from Basketball-Reference and stored them in .csv files. The advanced stats I kept were cumulative (offensive win shares, defensive win shares and value over replacement player). This was actually part of a larger project to scrape complete statistics for teams, players and awards (the Kaggle dataset resides [here](https://www.kaggle.com/sumitrodatta/nba-aba-baa-stats)). To my knowledge, my dataset is unique in that it includes BAA stats and ABA stats, which is not really of use here. 
 
 For players who played on multiple teams in one season, I kept their total stats and discarded the team-specific season portions. In the previous iteration of this project, we scaled games played and games started to a normal distribution due to fluctuations in games played between seasons caused by the COVID-19 pandemic. There was an initial desire to use totals to bake in availability/body fragility, but the shortened seasons would cause the model to declare all players to be fragile and underestimate their contract. We will convert the games started to a percentage of games played and we will change the games played to a percentage of maximum playable games. This maximum will differ for players who played for multiple teams in one season.
@@ -202,7 +200,7 @@ s1y2_yr_acc=round(accuracy(combined_predictions,truth=contract_yrs,estimate=yrs_
 
 The years accuracy of the years-first model was `r y1s2_yr_acc`%, while the years accuracy of the salary-first model was `r s1y2_yr_acc`%. Here's some confusion matrices on how each model handled the prediction of contract years.
 
-```{r years_confusion_matrix,fig.show='hold',out.width="50%"}
+```{r years_confusion_matrix,fig.show='hold',out.width="50%",echo=FALSE}
 y1_yr_heatmap=combined_predictions %>%
   conf_mat(data=.,truth=contract_yrs,estimate=yrs_y1s2) %>%
   autoplot(type="heatmap") +
@@ -251,7 +249,7 @@ The salary-first model has a lower RMSE than the the years-first model when pred
 
 As we did with the years models, let's look at the most extreme salary misses.
 
-```{r last_yr_extreme_sal_misses}
+```{r last_yr_extreme_sal_misses,echo=FALSE}
 combined_predictions %>% 
   mutate(abs_error_y1s2_salary=abs(first_year_percent_of_cap - y1s2_cap_percent)) %>% 
   slice_max(abs_error_y1s2_salary,n=10) %>%
@@ -265,7 +263,7 @@ Harrell, Gasol & Ibaka seemingly took less money in exchange for a greater shot 
 
 On a more positive note, here's some players on which the models were very close on.
 
-```{r last_yr_extreme_sal_close}
+```{r last_yr_extreme_sal_close,echo=FALSE}
 combined_predictions %>% filter(contract_yrs %in% c(1:5) & yrs_y1s2 %in% c(1:5)) %>%
   mutate(abs_error_y1s2_salary=abs(first_year_percent_of_cap - y1s2_cap_percent)) %>% 
   slice_min(abs_error_y1s2_salary,n=10) %>%
@@ -454,16 +452,28 @@ I used a total of six models.
     + support vectors are the points closest to the hyperplane, named as such because the hyperplane would change if those points were removed
     + I believe this image from Wikipedia succinctly explains an SVM
     
-```{r svm_explain, out.width="50%", fig.cap="H1 does not separate the classes. H2 does, but only with a small margin. H3 separates them with the maximal margin. By User:ZackWeinberg, based on PNG version by User:Cyc - This file was derived from: Svm separating hyperplanes.png, CC BY-SA 3.0, https://commons.wikimedia.org/w/index.php?curid=22877598",echo=FALSE}
+```{r svm_explain, out.width="50%", fig.align='center', fig.cap="H1 does not separate the classes. H2 does, but only with a small margin. H3 separates them with the maximal margin. By User:ZackWeinberg, based on PNG version by User:Cyc - This file was derived from: Svm separating hyperplanes.png, CC BY-SA 3.0, https://commons.wikimedia.org/w/index.php?curid=22877598",echo=FALSE}
 knitr::include_graphics("Images/SVM2.png")
 ```
 
-```{r actual_values,include=FALSE}
-actual_values=train_set %>% 
-  select(1:4,contract_yrs,first_year_percent_of_cap)
-```
-
 ### Predicting Years First, then Salary
+
+```{r model_table_func,include=FALSE}
+get_yrs_metrics<-function(model,model_name,tuning_var){
+  f_meas=tuning_var %>% collect_metrics() %>% pull(mean) %>% max(.)
+  contract_yr_predict_vec=predict(model,new_data=train_set) %>% pull()
+  retrain_acc=accuracy_vec(truth=train_set$contract_yrs,
+                           estimate=contract_yr_predict_vec)
+  off_by_more_than_one=sum(abs(as.numeric(as.character(train_set$contract_yrs))-
+                                 as.numeric(as.character(contract_yr_predict_vec)))>1)/
+    length(contract_yr_predict_vec)
+  num_max_yr_predicts=sum(as.numeric(as.character(contract_yr_predict_vec))==5)
+  return(tibble(Method=model_name,"Correct Predict %"=retrain_acc,
+                "Off by >1 Yr"=off_by_more_than_one,
+                "Max Year Predicts"=num_max_yr_predicts,
+                "F1 Score"=f_meas))
+}
+```
 
 We'll start by predicting years first and then salary with years as an input.
 
@@ -489,28 +499,12 @@ wf=wf %>% finalize_workflow(multinom_tuning %>% select_best(metric="f_meas"))
 multinom_fit=fit(wf,train_set)
 ```
 
-```{r model_table_func,echo=FALSE}
-get_yrs_metrics<-function(model,model_name,tuning_var){
-  f_meas=tuning_var %>% collect_metrics() %>% pull(mean) %>% max(.)
-  contract_yr_predict_vec=predict(model,new_data=train_set) %>% pull()
-  retrain_acc=accuracy_vec(truth=train_set$contract_yrs,
-                           estimate=contract_yr_predict_vec)
-  off_by_more_than_one=sum(abs(as.numeric(as.character(train_set$contract_yrs))-
-                                 as.numeric(as.character(contract_yr_predict_vec)))>1)/
-    length(contract_yr_predict_vec)
-  num_max_yr_predicts=sum(as.numeric(as.character(contract_yr_predict_vec))==5)
-  return(tibble(Method=model_name,"Correct Predict %"=retrain_acc,
-                "Off by >1 Yr"=off_by_more_than_one,
-                "Max Year Predicts"=num_max_yr_predicts,
-                "F1 Score"=f_meas))
-}
-```
-
 Let's get the most important variables of the multinomial model.
 
 ```{r multinom_top_vars,echo=FALSE}
 vip(pull_workflow_fit(multinom_fit),scale=TRUE)
 ```
+
 Effective field goal percentage & field goal percentage in both their current-year & last three-years forms comprise the top 4 most important variables.
 
 Next up is the k-nearest neighbors model.
@@ -526,7 +520,7 @@ knn_fit=fit(wf,train_set)
 knn_tuning %>% select_best(metric="f_meas") %>% knitr::kable()
 ```
 
-Looks like the best knn model is near the middle of the tune grid with using 17 closest comparable players.
+Looks like the best knn model is near the upper limit of the tune grid with using 49 closest comparable players.
 
 The next model is the decision tree model. We can tune the cost complexity parameter (cp) in this model. CP is the minimum for how much the residual sum of squares must improve for another partition to be added. A CP that is too high will have too few branches, while a CP that is too low will be difficult to follow since there are many branches. We lean towards the lower end of the spectrum. We will also change the min_n, which is the minimum number of data points in a node that are required for the node to be split further. The default is 20, but the 5-year portion of the dataset is small, so we will decrease min_n to 1. Since there exists an element of randomness in choosing samples to model a decision tree, we need to set a seed to keep the work reproducible.
 ```{r decision_tree_yrs_indep}
@@ -596,6 +590,8 @@ forest_tuning %>% select_best(metric="f_meas") %>% knitr::kable()
 vip(pull_workflow_fit(rand_forest_fit),scale=TRUE)
 ```
 
+The contract year versions of the holistic advanced stats comprise 3 of the top 5 most important variables in the random forest model. The other two variables in the top 5 are percentage of games played in the contract year and percentage of games played in the past 3 years.
+
 Finally, we train the support vector machine on the model. There are two tuning parameters:
 
 * rbf_sigma: determines how well to fit the training data (higher=fit closer to training)
@@ -620,3 +616,24 @@ svm_tuning %>% select_best(metric="f_meas") %>% knitr::kable()
 Unfortunately, there is no concept of variable importance for an SVM model.
 
 Let's look at some performance metrics, and see which models we want to take along as inputs for predicting salary. Initially, accuracy was chosen as the metric to determine the best submodel by cross-validation. However, with the inherent imbalance of the outcome classes, the F1 score is a better metric. As an extreme example, if there were only two classes with a 90:10 split, a classifier could achieve 90% accuracy by simply predicting the more populous class for every case. On the other hand, the F1 score attempts to minimize both false positives & false negatives.
+
+```{r y1_metrics,echo=FALSE}
+models<-get_yrs_metrics(multinom_fit,"Multinomial",multinom_tuning)
+models<-bind_rows(models,
+                  get_yrs_metrics(knn_fit,"KNN",knn_tuning),
+                  get_yrs_metrics(decision_tree_fit,"Decision Tree",tree_tuning),
+                  get_yrs_metrics(rand_forest_fit,"Random Forest",forest_tuning),
+                  get_yrs_metrics(svm_fit,"SVM",svm_tuning))
+models %>% knitr::kable()
+```
+
+The SVM suffers from the same problem that I talked about when fitting the decision tree. It has the highest F1 score, but the lowest accuracy. In fact, more of its predictions are more than 1 year off than being correct. The random forest stands far above the rest with 97% accuracy! It also has the highest F1-score barring the SVM. In last year's project, the random forests had the best performance as well, but had difficulty distinguishing 5-year contracts. Shifting to a classification problem seems to have solved that. The KNN model pipped the multinomial model in F1-score and accuracy, but had significantly less max-year predictions. While anticlimactic, I think the best course of action is to simply use the random forest model to make contract-year predictions. We will re-do the cross validation, but this time stratify on the years, which are now a dependent variable.
+
+```{r y1_predict_for_s2}
+train_set_after_y1=train_set %>% select(-contract_yrs) %>% 
+  bind_cols(contract_yrs=predict(rand_forest_fit,newdata=train_set))
+cv=vfold_cv(train_set_after_y1,v=10,strata=contract_yrs)
+s2_recipe=recipe(first_year_percent_of_cap~.,data=train_set_after_y1) %>% 
+  update_role(seas_id:player,new_role="id") %>% step_dummy(type)
+```
+Now I can run through the models for salary using the predicted years as an input. The only model I won't reuse is the decision tree. Since there's so many different salary percentages, a decision tree model would be useless or far too complicated.
