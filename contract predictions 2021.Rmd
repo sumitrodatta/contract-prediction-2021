@@ -729,4 +729,94 @@ models<-bind_rows(models,
                   get_sal_metrics(fit_s2_svm,"SVM",tune_svm,train_set_after_y1))
 models %>% knitr::kable()
 ```
-Mean absolute error is the measure of the average difference between forecasts, while the residual mean squared error penalizes large errors. The SVM model actually has the best RMSE this time around, but the random forest also tops the leaderboard of maximizing predictions within 2% of actual value, and minimizing predictions that are more than 5% away. The linear model also has a very close RMSE to the random forest & SVM, but it suffers on the dataset-specific metrics. The KNN model has the worst RMSE, but still performs better on predictions than the linear model. With the SVM & random forest being so close in traditional metrics, we will take the median of the two.
+Mean absolute error is the measure of the average difference between forecasts, while the residual mean squared error penalizes large errors. The SVM model actually has the best RMSE this time around, but the random forest also tops the leaderboard of maximizing predictions within 2% of actual value, and minimizing predictions that are more than 5% away. The linear model also has a very close RMSE to the random forest & SVM, but it suffers on the dataset-specific metrics. The KNN model has the worst RMSE, but still performs better on predictions than the linear model. With the SVM & random forest being so close in traditional metrics, we will take the mean of the two.
+
+### Predicting Salary First, then Years
+
+Now I'll switch up the order, predicting salary first and then years.
+```{r s1_steps}
+cv=vfold_cv(train_set,v=10,strata=type,repeats=5)
+s1_recipe=recipe(first_year_percent_of_cap~.,data=train_set) %>% 
+  update_role(seas_id:player,new_role="id") %>% 
+  step_rm(contract_yrs) %>% step_dummy(type)
+```
+
+```{r lin_sal_indep}
+wf=workflow() %>% add_recipe(s1_recipe) %>% 
+  add_model(linear_reg() %>% 
+              set_engine("lm") %>% 
+              set_mode("regression"))
+tune_lin=wf %>% tune_grid(resamples=cv,metrics=metric_set(rmse,mae))
+wf=wf %>% finalize_workflow(tune_lin %>% select_best(metric="rmse"))
+fit_s1_lin=fit(wf,train_set)
+vip(pull_workflow_fit(fit_s1_lin),scale=TRUE)
+```
+
+The most important factor here is the type of free agent a player is. Next on the importance graph is amount of 2-point shots attempted per game in the contract year. 2PA/G is a measure of scoring opportunity: leaders in this category are usually those also near the top in points per game, as their talent warrants them taking that increased volume of shots.
+
+```{r knn_sal_indep}
+wf=workflow() %>% add_recipe(s1_recipe) %>% 
+  add_model(nearest_neighbor(neighbors=tune()) %>% 
+              set_engine("kknn") %>% 
+              set_mode("regression"))
+tune_knn=wf %>% tune_grid(resamples=cv,
+                        grid=expand.grid(neighbors=5:50),
+                        metrics=metric_set(rmse,mae))
+wf=wf %>% finalize_workflow(tune_knn %>% select_best(metric="rmse"))
+fit_s1_knn=fit(wf,train_set)
+tune_knn %>% select_best(metric="rmse") %>% knitr::kable()
+```
+
+The best KNN model is smack-dab in the middle of the tune grid, taking the 25 closest players in similarity to construct a player's salary prediction.
+
+```{r forest_sal_indep}
+set.seed(100,sample.kind = "Rounding")
+wf=workflow() %>% add_recipe(s1_recipe) %>% 
+  add_model(rand_forest(mtry = tune()) %>% 
+  set_engine("ranger",importance="permutation") %>% set_mode("regression"))
+tune_forest=wf %>% tune_grid(resamples=cv,
+                        grid=expand.grid(mtry=5:10),
+                        metrics=metric_set(rmse,mae))
+wf=wf %>% finalize_workflow(tune_forest %>% select_best(metric="rmse"))
+fit_s1_forest=fit(wf,train_set)
+tune_forest %>% select_best(metric="rmse") %>% knitr::kable()
+vip(pull_workflow_fit(fit_s1_forest),scale=TRUE)
+```
+
+The salary-first forest is more clustered at the top than the salary-second forest, having 5 variables >50% importance vs 1 respectively. Excluding contract years in the salary-second forest, the top 5 variables of importance are the same in both forests: minutes per game, points per game, value over replacement player, offensive & defensive win shares, all from the contract-year subset.
+
+```{r svm_sal_indep}
+set.seed(100,sample.kind = "Rounding")
+wf=workflow() %>% add_recipe(s1_recipe) %>% 
+  add_model(svm_rbf(rbf_sigma=tune(),cost=tune()) %>% 
+  set_engine("kernlab") %>% set_mode("regression"))
+tune_svm=wf %>% tune_grid(resamples=cv,
+                        grid=expand.grid(rbf_sigma=0.1^seq(2:5),
+                                         cost=c(0.25,0.5,1)),
+                        metrics=metric_set(rmse,mae))
+wf=wf %>% finalize_workflow(tune_svm %>% select_best(metric="rmse"))
+fit_s1_svm=fit(wf,train_set)
+tune_svm %>% select_best(metric="rmse") %>% knitr::kable()
+```
+
+```{r s1_metrics,echo=FALSE}
+models<-get_sal_metrics(fit_s1_lin,"Linear",tune_lin,train_set)
+models<-bind_rows(models,
+                  get_sal_metrics(fit_s1_knn,"KNN",tune_knn,train_set),
+                  get_sal_metrics(fit_s1_forest,"Random Forest",tune_forest,
+                                  train_set),
+                  get_sal_metrics(fit_s1_svm,"SVM",tune_svm,train_set))
+models %>% knitr::kable()
+```
+Once again, the random forest finishes second to the SVM model in traditional metrics but beats it out in our dataset-specific metrics. All 4 models performed worse when predicting salary-first vs salary-second. As was done with the salary-second model, we will use the mean of SVM & random forest.
+
+```{r s1_predict_for_y2}
+train_set_after_s1=train_set %>% select(-first_year_percent_of_cap) %>% 
+  bind_cols(first_year_percent_of_cap=
+              tibble(forest=predict(fit_s1_forest,new_data=train_set) %>% pull(),
+                     svm=predict(fit_s1_svm,new_data=train_set) %>% pull) %>%
+              rowwise() %>% mutate(m=mean(c_across(forest:svm))) %>% pull(m))
+cv=vfold_cv(train_set_after_s1,v=10,strata=type,repeats=5)
+y2_recipe=recipe(contract_yrs~.,data=train_set_after_s1) %>% 
+  update_role(seas_id:player,new_role="id") %>% step_dummy(type)
+```
