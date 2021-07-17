@@ -499,6 +499,17 @@ get_sal_metrics<-function(model,model_name,tuning_var,train_df){
 }
 ```
 
+```{r pretty_variable_importance,include=FALSE}
+prettify_vip<-function(model,title){
+  importance_plot = vip(pull_workflow_fit(model),scale=TRUE,
+                        mapping = aes_string(fill = "Variable")) +
+  dark_theme_gray() + theme(legend.position = "none") + ggtitle(title)
+  ggsave(paste0("Images/",title,".png"),plot=importance_plot,
+       width=7.5,height=3.75,units = "in")
+  knitr::include_graphics(paste0("Images/",title,".png"))
+}
+```
+
 We'll start by predicting years first and then salary with years as an input.
 
 With caret, everything could be thrown into the train function: cross-validation, tuning, data, etc. Tidymodels is more explicit in its steps. The standard 10-fold cross validation is how the data is going to be resampled. In addition, we'll stratify selection, so there is sufficient data to predict all contract year lengths. A hypothetical (albeit unlikely) scenario that could occur without stratification is a fold could include all instances of restricted free agents (which are more rare) in the test portion, and none in the train portion. The chosen algorithm would be confused as to how to predict something for which it has no training.
@@ -544,8 +555,7 @@ fit_y1_multinom=fit(wf,train_set)
 Let's get the most important variables of the multinomial model.
 
 ```{r multinom_top_vars,echo=FALSE}
-vip(pull_workflow_fit(fit_y1_multinom),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_y1_multinom,"Multinomial Y1 Model Variable Importance")
 ```
 
 Effective field goal percentage & field goal percentage in both their current-year & last three-years forms comprise the top 4 most important variables.
@@ -582,8 +592,7 @@ tune_tree %>% select_best() %>% knitr::kable()
 Let's get the most important variables of the decision_tree model.
 
 ```{r decision_tree_top_vars,echo=FALSE}
-vip(pull_workflow_fit(fit_y1_tree),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_y1_tree,"Decision Tree Y1 Model Variable Importance")
 ```
 The individual contract-year components of the holistic advanced stat of win shares rank within the top-4 most important variables. Durability and availabilty are also highly desirable characteristics, as evidenced by the high values of contract-year minutes per game, contract-year games played percentage and last-3-years games played percentage.
 
@@ -631,8 +640,7 @@ tune_forest %>% select_best() %>% knitr::kable()
 ```
 
 ```{r rand_forest_top_vars,echo=FALSE}
-vip(pull_workflow_fit(fit_y1_forest),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_y1_forest,"Random Forest Y1 Model Variable Importance")
 ```
 
 The contract year versions of the holistic advanced stats comprise 3 of the top 5 most important variables in the random forest model. The other two variables in the top 5 are percentage of games played in the contract year and percentage of games played in the past 3 years.
@@ -697,8 +705,7 @@ wf=workflow() %>% add_recipe(s2_recipe) %>%
 tune_lin=wf %>% tune_grid(resamples=cv,metrics=metric_set(rmse,mae))
 wf=wf %>% finalize_workflow(tune_lin %>% select_best(metric="rmse"))
 fit_s2_lin=fit(wf,train_set_after_y1)
-vip(pull_workflow_fit(fit_s2_lin),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_s2_lin,"Linear S2 Model Variable Importance")
 ```
 Contract years dwarf all other variables in terms of importance.
 
@@ -728,8 +735,7 @@ tune_forest=wf %>% tune_grid(resamples=cv,
 wf=wf %>% finalize_workflow(tune_forest %>% select_best(metric="rmse"))
 fit_s2_forest=fit(wf,train_set_after_y1)
 tune_forest %>% select_best(metric="rmse") %>% knitr::kable()
-vip(pull_workflow_fit(fit_s2_forest),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_s2_forest,"Random Forest S2 Model Variable Importance")
 ```
 
 Like the linear model, contract years are by far the most important variable in the random forest model, although not to the same extent. The 2nd-thru-6th most important variables  are all from the contract-year subset of statistics, 3 of these being advanced stats.
@@ -778,8 +784,7 @@ wf=workflow() %>% add_recipe(s1_recipe) %>%
 tune_lin=wf %>% tune_grid(resamples=cv,metrics=metric_set(rmse,mae))
 wf=wf %>% finalize_workflow(tune_lin %>% select_best(metric="rmse"))
 fit_s1_lin=fit(wf,train_set)
-vip(pull_workflow_fit(fit_s1_lin),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_s1_lin,"Linear S1 Model Variable Importance")
 ```
 
 The most important factor here is the type of free agent a player is. Next on the importance graph is amount of 2-point shots attempted per game in the contract year. 2PA/G is a measure of scoring opportunity: leaders in this category are usually those also near the top in points per game, as their talent warrants them taking that increased volume of shots.
@@ -810,8 +815,7 @@ tune_forest=wf %>% tune_grid(resamples=cv,
 wf=wf %>% finalize_workflow(tune_forest %>% select_best(metric="rmse"))
 fit_s1_forest=fit(wf,train_set)
 tune_forest %>% select_best(metric="rmse") %>% knitr::kable()
-vip(pull_workflow_fit(fit_s1_forest),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_s1_forest,"Random Forest S1 Model Variable Importance")
 ```
 
 The salary-first forest is more widely clustered at the top than the salary-second forest, having 5 variables >50% importance vs 1 respectively. Excluding contract years in the salary-second forest, the top 5 variables of importance are the same in both forests: minutes per game, points per game, value over replacement player, offensive & defensive win shares, all from the contract-year subset.
@@ -860,8 +864,7 @@ wf=workflow() %>% add_recipe(y2_recipe) %>%
 tune_multinom=wf %>% tune_grid(resamples=cv,metrics=metric_set(macro_weight_f1))
 wf=wf %>% finalize_workflow(tune_multinom %>% select_best())
 fit_y2_multinom=fit(wf,train_set_after_s1)
-vip(pull_workflow_fit(fit_y2_multinom),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_y2_multinom,"Multinomial Y2 Model Variable Importance")
 ```
 
 The multinomial years-second model essentially discards all other variables in favor of the predicted first-year-percent-of-cap variable.
@@ -892,8 +895,7 @@ tune_tree=wf %>% tune_grid(resamples=cv,
 wf=wf %>% finalize_workflow(tune_tree %>% select_best())
 fit_y2_tree=fit(wf,train_set_after_s1)
 tune_tree %>% select_best() %>% knitr::kable()
-vip(pull_workflow_fit(fit_y2_tree),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_y2_tree,"Decision Tree Y2 Model Variable Importance")
 ```
 
 First-year-percent-of-cap shoots up to 1st in importance in the years-second decision tree, much like we saw in the years-second multinomial model. Contract-year minutes per game & defensive win shares are pretty much tied for second in terms of variable importance.
@@ -915,8 +917,7 @@ tune_forest=wf %>% tune_grid(resamples=cv,
 wf=wf %>% finalize_workflow(tune_forest %>% select_best())
 fit_y2_forest=fit(wf,train_set_after_s1)
 tune_forest %>% select_best() %>% knitr::kable()
-vip(pull_workflow_fit(fit_y2_forest),scale=TRUE,mapping = aes_string(fill = "Variable")) +
-  dark_theme_gray() + theme(legend.position = "none")
+prettify_vip(fit_y2_forest,"Random Forest Y2 Model Variable Importance")
 ```
 
 The variable importance graph looks like the multinomial model
