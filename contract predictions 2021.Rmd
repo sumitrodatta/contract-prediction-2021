@@ -374,14 +374,16 @@ create_data<-function(x){
              ifelse(fta_last_3_yrs==0,0,ft_last_3_yrs/fta_last_3_yrs)) %>%
     #remove categories that aren't predictive vars or linear combo of others
     select(-c(hof,lg,pos,birth_year,tm,
-              trb,trb_last_3_yrs,fg,fga,fg_last_3_yrs,fga_last_3_yrs)) %>%
+              trb,trb_last_3_yrs,
+              fg,fga,fg_last_3_yrs,fga_last_3_yrs,
+              pts,pts_last_3_yrs)) %>%
     #convert contract year and last 3 year stats to per game (except games)
-    mutate(across(c(mp,x3p:x3pa,x2p:x2pa,ft:fta,orb:pts),list(per_game=~./g)),
+    mutate(across(c(mp,x3p:x3pa,x2p:x2pa,ft:fta,orb:pf),list(per_game=~./g)),
            .after="gs_percent") %>%
-    select(-c(g,mp,x3p:x3pa,x2p:x2pa,ft:fta,orb:pts,ws)) %>% 
-    mutate(across(mp_last_3_yrs:pts_last_3_yrs,list(per_game=~./g_last_3_yrs)),
+    select(-c(g,mp,x3p:x3pa,x2p:x2pa,ft:fta,orb:pf,ws)) %>% 
+    mutate(across(mp_last_3_yrs:pf_last_3_yrs,list(per_game=~./g_last_3_yrs)),
            .after="gs_percent_last_3_yrs") %>%
-    select(-c(g_last_3_yrs,mp_last_3_yrs:pts_last_3_yrs,ws_last_3_yrs)) %>% 
+    select(-c(g_last_3_yrs,mp_last_3_yrs:pf_last_3_yrs,ws_last_3_yrs)) %>% 
     ungroup() %>% mutate(contract_yrs=factor(contract_yrs,levels = 0:5)) %>%
     replace_na(list(fg_percent=0,x3p_percent=0,x2p_percent=0,
                     e_fg_percent=0,ft_percent=0))
@@ -406,7 +408,7 @@ Why I settled on 3 years:
     
 I performed the same processing on the three-year totals, using the three-year game total as the denominator for converting to per game. I had to calculate the three-year percentages, and also re-engineered the win shares per 48 minutes metric.
 
-I removed categories that were linear combinations of one another. For example, total rebounds can be found by simply adding up offensive and defensive rebounds. I kept age and experience as predictor variables, but removed position because I felt it would ultimately reflect in the stats themselves.
+I removed categories that were linear combinations of one another. For example, total rebounds can be found by simply adding up offensive and defensive rebounds, and points are just the result of 2\*(number of 2 point field goals made) & 3\*(number of 3 point field goals made). I kept age and experience as predictor variables, but removed position because I felt it would ultimately reflect in the stats themselves.
 
 I changed contract years from a numeric column to a factor/category column. This changes its prediction from a regression problem to a classification problem. A 2.5-year contract makes no sense, so it is in our best interest to discretize the years and store them as factors rather than round a regression result.
 
@@ -518,7 +520,7 @@ Recipes is tidymodels' pre-processing package. The first step to change the role
 
 ```{r y1_steps}
 cv=vfold_cv(train_set,v=10,strata=type,repeats=5)
-yr1_recipe=recipe(contract_yrs~.,data=train_set) %>% 
+y1_recipe=recipe(contract_yrs~.,data=train_set) %>% 
   update_role(seas_id:player,new_role="id") %>% 
   step_rm(first_year_percent_of_cap) %>% step_dummy(type)
 ```
@@ -542,7 +544,7 @@ macro_weight_f1 <- new_class_metric(macro_weight_f1,"maximize")
 ```
 First up is the multinomial regression model.
 ```{r multinom_yrs_indep}
-wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+wf=workflow() %>% add_recipe(y1_recipe) %>% 
   add_model(multinom_reg(penalty=0) %>% 
               set_engine("glmnet") %>% 
               set_mode("classification"))
@@ -554,7 +556,7 @@ fit_y1_multinom=fit(wf,train_set)
 
 Let's get the most important variables of the multinomial model.
 
-```{r multinom_top_vars,echo=FALSE}
+```{r multinom_top_vars,echo=FALSE, fig.align='center',out.width="100%"}
 prettify_vip(fit_y1_multinom,"Multinomial Y1 Model Variable Importance")
 ```
 
@@ -562,7 +564,7 @@ Effective field goal percentage & field goal percentage in both their current-ye
 
 Next up is the k-nearest neighbors model.
 ```{r knn_yrs_indep}
-wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+wf=workflow() %>% add_recipe(y1_recipe) %>% 
   add_model(nearest_neighbor(neighbors = tune()) %>% 
   set_engine("kknn") %>% set_mode("classification"))
 tune_knn=wf %>% tune_grid(resamples=cv,
@@ -578,7 +580,7 @@ Looks like the best knn model is near the upper limit of the tune grid with usin
 The next model is the decision tree model. We can tune the cost complexity parameter (cp) in this model. CP is the minimum for how much the residual sum of squares must improve for another partition to be added. A CP that is too high will have too few branches, while a CP that is too low will be difficult to follow since there are many branches. We lean towards the lower end of the spectrum. We will also change the min_n, which is the minimum number of data points in a node that are required for the node to be split further. The default is 20, but the 5-year portion of the dataset is small, so we will decrease min_n to 1. Since there exists an element of randomness in choosing samples to model a decision tree, we need to set a seed to keep the work reproducible.
 ```{r decision_tree_yrs_indep}
 set.seed(100,sample.kind = "Rounding")
-wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+wf=workflow() %>% add_recipe(y1_recipe) %>% 
   add_model(decision_tree(cost_complexity = tune(),min_n=tune()) %>% 
   set_engine("rpart") %>% set_mode("classification"))
 tune_tree=wf %>% tune_grid(resamples=cv,
@@ -591,7 +593,7 @@ tune_tree %>% select_best() %>% knitr::kable()
 ```
 Let's get the most important variables of the decision_tree model.
 
-```{r decision_tree_top_vars,echo=FALSE}
+```{r decision_tree_top_vars,echo=FALSE, fig.align='center',out.width="100%"}
 prettify_vip(fit_y1_tree,"Decision Tree Y1 Model Variable Importance")
 ```
 The individual contract-year components of the holistic advanced stat of win shares rank within the top-4 most important variables. Durability and availabilty are also highly desirable characteristics, as evidenced by the high values of contract-year minutes per game, contract-year games played percentage and last-3-years games played percentage.
@@ -628,7 +630,7 @@ Random forest algorithms require an explicit call for variable importance, so we
     
 ```{r rand_forest_yrs_indep}
 set.seed(100,sample.kind = "Rounding")
-wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+wf=workflow() %>% add_recipe(y1_recipe) %>% 
   add_model(rand_forest(mtry = tune()) %>% 
   set_engine("ranger",importance="permutation") %>% set_mode("classification"))
 tune_forest=wf %>% tune_grid(resamples=cv,
@@ -639,7 +641,7 @@ fit_y1_forest=fit(wf,train_set)
 tune_forest %>% select_best() %>% knitr::kable()
 ```
 
-```{r rand_forest_top_vars,echo=FALSE}
+```{r rand_forest_top_vars,echo=FALSE, fig.align='center',out.width="100%"}
 prettify_vip(fit_y1_forest,"Random Forest Y1 Model Variable Importance")
 ```
 
@@ -655,7 +657,7 @@ Finally, we train the support vector machine on the model. There are two tuning 
     
 ```{r svm_yrs_indep}
 set.seed(100,sample.kind = "Rounding")
-wf=workflow() %>% add_recipe(yr1_recipe) %>% 
+wf=workflow() %>% add_recipe(y1_recipe) %>% 
   add_model(svm_rbf(rbf_sigma=tune(),cost=tune()) %>% 
   set_engine("kernlab") %>% set_mode("classification"))
 tune_svm=wf %>% tune_grid(resamples=cv,
@@ -697,7 +699,7 @@ s2_recipe=recipe(first_year_percent_of_cap~.,data=train_set_after_y1) %>%
 ```
 Now I can run through the models for salary using the predicted years as an input. The models I won't reuse are the multinomial model and the decision tree. The multinomial model is for classification only, while we are attempting to predict a continuous outcome in the first year salary as a percentage of the salary cap. We'll sub in a linear regression model as our new baseline. Since there's so many different salary percentages, a decision tree model would be useless or far too complicated.
 
-```{r lin_sal_dep}
+```{r lin_sal_dep, fig.align='center',out.width="100%"}
 wf=workflow() %>% add_recipe(s2_recipe) %>% 
   add_model(linear_reg() %>% 
               set_engine("lm") %>% 
@@ -724,7 +726,7 @@ tune_knn %>% select_best(metric="rmse") %>% knitr::kable()
 
 The best knn salary model is around the middle of the tune grid, using 22 comparables.
 
-```{r forest_sal_dep}
+```{r forest_sal_dep, fig.align='center',out.width="100%"}
 set.seed(100,sample.kind = "Rounding")
 wf=workflow() %>% add_recipe(s2_recipe) %>% 
   add_model(rand_forest(mtry = tune()) %>% 
@@ -776,7 +778,7 @@ s1_recipe=recipe(first_year_percent_of_cap~.,data=train_set) %>%
   step_rm(contract_yrs) %>% step_dummy(type)
 ```
 
-```{r lin_sal_indep}
+```{r lin_sal_indep, fig.align='center',out.width="100%"}
 wf=workflow() %>% add_recipe(s1_recipe) %>% 
   add_model(linear_reg() %>% 
               set_engine("lm") %>% 
@@ -804,7 +806,7 @@ tune_knn %>% select_best(metric="rmse") %>% knitr::kable()
 
 The best KNN model is smack-dab in the middle of the tune grid, taking the 25 closest players in similarity to construct a player's salary prediction.
 
-```{r forest_sal_indep}
+```{r forest_sal_indep, fig.align='center',out.width="100%"}
 set.seed(100,sample.kind = "Rounding")
 wf=workflow() %>% add_recipe(s1_recipe) %>% 
   add_model(rand_forest(mtry = tune()) %>% 
@@ -843,20 +845,18 @@ models<-bind_rows(models,
                   get_sal_metrics(fit_s1_svm,"SVM",tune_svm,train_set))
 models %>% knitr::kable()
 ```
-Once again, the random forest finishes second to the SVM model in traditional metrics but beats it out in our dataset-specific metrics. All 4 models performed worse when predicting salary-first vs salary-second. As was done with the salary-second model, we will use the mean of SVM & random forest.
+Once again, the random forest finishes second to the SVM model in traditional metrics but beats it out in our dataset-specific metrics. All 4 models performed worse when predicting salary-first vs salary-second. With the SVM dipping below 80%, we will use the random forest as our salary prediction.
 
 ```{r s1_predict_for_y2}
 train_set_after_s1=train_set %>% select(-first_year_percent_of_cap) %>% 
-  bind_cols(first_year_percent_of_cap=
-              tibble(forest=predict(fit_s1_forest,new_data=train_set) %>% pull(),
-                     svm=predict(fit_s1_svm,new_data=train_set) %>% pull) %>%
-              rowwise() %>% mutate(m=mean(c_across(forest:svm))) %>% pull(m))
+  bind_cols(first_year_percent_of_cap=predict(fit_s1_forest,new_data=train_set) %>% 
+              pull())
 cv=vfold_cv(train_set_after_s1,v=10,strata=type,repeats=5)
 y2_recipe=recipe(contract_yrs~.,data=train_set_after_s1) %>% 
   update_role(seas_id:player,new_role="id") %>% step_dummy(type)
 ```
 
-```{r multinom_yrs_dep}
+```{r multinom_yrs_dep, fig.align='center',out.width="100%"}
 wf=workflow() %>% add_recipe(y2_recipe) %>% 
   add_model(multinom_reg(penalty=0) %>% 
               set_engine("glmnet") %>% 
@@ -883,7 +883,7 @@ tune_knn %>% select_best() %>% knitr::kable()
 
 All 50 neighbors are needed in order for the KNN years-second model to classify a player's contract years.
 
-```{r decision_tree_yrs_dep}
+```{r decision_tree_yrs_dep, fig.align='center',out.width="100%"}
 set.seed(100,sample.kind = "Rounding")
 wf=workflow() %>% add_recipe(y2_recipe) %>% 
   add_model(decision_tree(cost_complexity = tune(),min_n=tune()) %>% 
@@ -904,9 +904,9 @@ First-year-percent-of-cap shoots up to 1st in importance in the years-second dec
 rpart.plot(pull_workflow_fit(fit_y2_tree)$fit)
 ```
 
-Fortunately, the years-second decision tree predicts some three year contracts. It maximizes its prediction if the first-year-percent-of-cap is greater than 10%.
+Fortunately, the years-second decision tree predicts some three year contracts. It maximizes its prediction at 4 contract years if the first-year-percent-of-cap is greater than 10%.
 
-```{r rand_forest_yrs_dep}
+```{r rand_forest_yrs_dep, fig.align='center',out.width="100%"}
 set.seed(100,sample.kind = "Rounding")
 wf=workflow() %>% add_recipe(y2_recipe) %>% 
   add_model(rand_forest(mtry = tune()) %>% 
@@ -920,7 +920,7 @@ tune_forest %>% select_best() %>% knitr::kable()
 prettify_vip(fit_y2_forest,"Random Forest Y2 Model Variable Importance")
 ```
 
-The variable importance graph looks like the multinomial model
+The variable importance graph looks like the multinomial model with a slightly less severe division between the first-year-percent-of-cap variable importance and the rest.
 
 ```{r svm_yrs_dep}
 set.seed(100,sample.kind = "Rounding")
@@ -945,4 +945,10 @@ models<-bind_rows(models,
                                   train_set_after_s1),
                   get_yrs_metrics(fit_y2_svm,"SVM",tune_svm,train_set_after_s1))
 models %>% knitr::kable()
+```
+
+```{r remove_unused_models,include=FALSE}
+rm(fit_s1_knn,fit_s1_lin,fit_s1_svm,
+   fit_y1_knn,fit_y1_multinom,fit_y1_tree,fit_y1_svm,
+   fit_s2_knn,fit_s2_lin)
 ```
