@@ -1008,3 +1008,145 @@ rm(fit_s1_knn,fit_s1_lin,fit_s1_svm,
    y1_recipe,y2_recipe,s1_recipe,s2_recipe,wf,cv,models)
 ```
 
+# Results
+
+Now it's time to test on the 2021 data.
+
+## Years First, Salary Second
+
+As a reminder, we're using a random forest as our years prediction, and using the mean of a random forest and SVM to predict salary.
+
+```{r y1s2_predictions}
+eval_y1_predict=as.numeric(as.character(
+  predict(fit_y1_forest,new_data=eval_set) %>% pull()))
+eval_s2_predict_forest=predict(fit_s2_forest,
+                               new_data=eval_set %>% select(-contract_yrs) %>%
+                                 bind_cols(contract_yrs=eval_y1_predict))
+eval_s2_predict_svm=predict(fit_s2_svm,
+                               new_data=eval_set %>% select(-contract_yrs) %>%
+                                 bind_cols(contract_yrs=eval_y1_predict))
+eval_s2_predict=tibble(forest=eval_s2_predict_forest %>% pull(),
+                       svm=eval_s2_predict_svm %>% pull()) %>% rowwise() %>%
+  mutate(m=mean(c_across(forest:svm))) %>% ungroup() %>% pull(m) 
+```
+## Salary First, Years Second
+
+For the S1Y2 model, we are using random forests for each component.
+```{r s1y2_predictions}
+eval_s1_predict=predict(fit_s1_forest,new_data=eval_set) %>% pull()
+eval_y2_predict=as.numeric(as.character(
+  predict(fit_y2_forest,new_data=eval_set %>% select(-first_year_percent_of_cap) %>%
+            bind_cols(first_year_percent_of_cap=eval_s1_predict)) %>% 
+  pull()))
+```
+
+\newpage
+
+## Player Option Decisions and Selected Free Agents
+
+Before I look at which players might be accepting or declining their option and then some selected high-profile free agents, let's look at the distribution of contract years.
+
+```{r both_model_results,include=FALSE}
+final_results<-eval_set %>% 
+  select(-c(contract_yrs,first_year_percent_of_cap)) %>%
+  add_column(yrs_Y1S2=eval_y1_predict,
+             yr1_cap_percent_Y1S2=eval_s2_predict,
+             yrs_S1Y2=eval_y2_predict,
+             yr1_cap_percent_S1Y2=eval_s1_predict)
+```
+```{r yrs_dist,echo=FALSE,results='asis'}
+y1s2=kable(final_results %>% group_by(yrs_Y1S2) %>% tally())
+s1y2=kable(final_results %>% group_by(yrs_S1Y2) %>% tally())
+cat(c("\\begin{table}[h]",y1s2,"\\hspace{1cm} \\centering ",s1y2,"\\end{table}"))
+```
+
+Last year, both the Y1S2 & the S1Y2 had only 4-5 players being out of the league. This didn't make sense, as the annual rookie draft brings in at least 30 new players. The problem was that there were players who were predicted to receive 1 year contracts but receiving salaries that were less than the minimum. My solution was to convert any salary predictions less than the minimum to zero, and any years predictions to zero where the salary prediction is zero.
+
+For the 2021-2022 season, the salary cap is \$112,414,000. The minimum contract (from [RealGM](https://basketball.realgm.com/nba/info/salary_cap)) is \$1,489,065. Therefore the minimum first year percent of cap in 2021 is  `r formattable::percent(1489065/112414000,digits=2)`.
+
+```{r convert_less_than_mins}
+first_yr_min=1489065/112414000
+final_results<-final_results %>% 
+  mutate(yrs_Y1S2=ifelse(yr1_cap_percent_Y1S2<=first_yr_min,0,yrs_Y1S2)) %>%
+  mutate(yr1_cap_percent_Y1S2=ifelse(yrs_Y1S2==0,0,yr1_cap_percent_Y1S2)) %>%
+  mutate(yrs_S1Y2=ifelse(yr1_cap_percent_S1Y2<=first_yr_min,0,yrs_S1Y2)) %>%
+  mutate(yr1_cap_percent_S1Y2=ifelse(yrs_S1Y2==0,0,yr1_cap_percent_S1Y2))
+```
+```{r yrs_dist_corrected,echo=FALSE, results='asis'}
+y1s2_correct=kable(final_results %>% group_by(yrs_Y1S2) %>% tally())
+s1y2_correct=kable(final_results %>% group_by(yrs_S1Y2) %>% tally())
+cat(c("\\begin{table}[h]",y1s2_correct,"\\hspace{1cm} \\centering ",
+      s1y2_correct,"\\end{table}"))
+```
+
+The Y1S2 predictions remain unchanged, while some 1-year and a handful of 2-year contracts in the S1Y2 predictions got converted to 0-year due to the salary being below the minimum threshold.
+
+Another task is to make the information more digestible. Contracts are usually reported in terms of total value, and players usually get five percent raises per year, so I'll add a column for each method for total contract value assuming the projected cap value of $112.414 million.
+```{r total_val_add}
+final_results<-final_results %>% 
+  mutate(total_Y1S2=
+           round(yr1_cap_percent_Y1S2*112414000*((1.05)^(yrs_Y1S2)-1)/0.05,digits=-4),
+         total_S1Y2=
+             round(yr1_cap_percent_S1Y2*112414000*((1.05)^(yrs_S1Y2)-1)/0.05,digits=-4))
+```
+
+```{r format_table,include=FALSE}
+final_results<-final_results %>%
+  mutate(total_Y1S2=currency(total_Y1S2,digits=0),
+         total_S1Y2=currency(total_S1Y2,digits=0),
+         yr1_cap_percent_Y1S2=formattable::percent(yr1_cap_percent_Y1S2,digits=2),
+         yr1_cap_percent_S1Y2=formattable::percent(yr1_cap_percent_S1Y2,digits=2))
+```
+
+### Player Option Decisions
+
+```{r join_options,echo=FALSE}
+options_decisions=inner_join(final_results,current_fa_options) %>%
+  arrange(desc(option_amt)) %>%
+  rename("Y1S2 Cap %"=yr1_cap_percent_Y1S2,
+         "S1Y2 Cap %"=yr1_cap_percent_S1Y2,
+         "Option Type"=option_type,
+         "2021 Option"=option_amt) %>%
+  select(player,"Y1S2 Cap %",yrs_Y1S2,total_Y1S2,"S1Y2 Cap %",yrs_S1Y2,
+         total_S1Y2,"Option Type", "2021 Option")
+kable(options_decisions) %>%
+  kable_styling(latex_options="scale_down")
+```
+Looking past the aforementioned Leonard & Paul, it's not a very inspired class of free agents with options. It's very clear that Dragić and Iguodala will have their club options declined. Coincidentally, both play for the Heat, who will look to retool after a disappointing first-round loss against the eventual 2021 champion Milwaukee Bucks, just a year after advancing to the NBA Finals. Winslow is also probably getting his option declined: he was actually part of the package that Miami sent to the Memphis Grizzlies to acquire Iguodala. Kris Dunn is very likely to pick up his player option after missing a majority of the year with a sprained MCL in his right knee, and the Knicks are probably elated to accept the club option on Mitchell Robinson.
+
+### Selected Free Agents
+
+Now let's see what the models have predicted for this year's other notable free agents. I'll present them five at a time and comment on some projections. We'll look at restricted free agents first.
+
+```{r non_option_contracts,echo=FALSE}
+non_options=anti_join(final_results,current_fa_options %>% select(player)) %>%
+  arrange(desc((yr1_cap_percent_Y1S2+yr1_cap_percent_S1Y2)/2)) %>%
+  rename("Y1S2 Cap %"=yr1_cap_percent_Y1S2, "S1Y2 Cap %"=yr1_cap_percent_S1Y2) %>%
+  select(player,age,type,"Y1S2 Cap %",yrs_Y1S2,total_Y1S2,"S1Y2 Cap %",yrs_S1Y2,total_S1Y2)
+```
+```{r rfas_top_five,echo=FALSE}
+non_options %>% filter(type=="RFA") %>% select(-type) %>% slice(1:5) %>% 
+  kable()
+```
+The biggest between-model discrepancies belong to Ball & Nunn, who lose `$13M` & `$16M` respectively when switching to the S1Y2 model. Graham finds himself stuck behind 2021 No. 2 overall pick LaMelo Ball & fringe All-Star Terry Rozier in the Charlotte Hornets guard rotation. A team could pry him from the Hornets with a big enough offer sheet, as Charlotte would probably like to use that cap space to address their centre position.
+```{r rfas_five_to_ten,echo=FALSE}
+non_options %>% filter(type=="RFA") %>% select(-type) %>% slice(6:10) %>% 
+  kable()
+```
+Robinson is often compared to the Nets' Joe Harris as both are sweet-shooting wings opening up the floor for superstar teammates. Harris provides more defensive chops & a midrange game, while Robinson is renowned for his off-ball movement. Last year, I projected Harris for 3-years and `$55-57M`, and he ended up getting 4-years and `$72M`. I was genuinely surprised by the projections for Markkanen & Trent Jr. In fact, I would say they should be flipped. The fact is, these models are exceedingly retrospective, with the only prospective variables being age & experience. They see Markkanen as an efficient scorer from both 2-point & 3-point range, while also being a serviceable rebounder. On the other hand, going by stats alone, Trent was inefficient with minimal contributions in rebounds and assists as well as a negative VORP. Never mind that Markkanen lost his starting lineup spot in the second half of the season, or that Trent turned down a contract extension before the season for 4 years & `$60M`.
+
+```{r ufas_top_five,echo=FALSE}
+non_options %>% filter(type=="UFA") %>% select(-type) %>% slice(1:5) %>% 
+  kable()
+```
+Conley is the only non-option free agent to break the `$100M` barrier.
+```{r ufas_mid_five,echo=FALSE}
+non_options %>% filter(type=="UFA") %>% select(-type) %>% slice(6:10) %>% 
+  kable()
+```
+THJ is the first example of wildly different predictions between the two models, with a staggering discrepancy of `$52M`!
+```{r ufas_last_five,echo=FALSE}
+non_options %>% filter(type=="UFA") %>% select(-type) %>% slice(11:15) %>% 
+  kable()
+```
+Batum rebuilt his value after being waived & stretched by the Hornets, becoming a valuable glue guy for the Clippers.
