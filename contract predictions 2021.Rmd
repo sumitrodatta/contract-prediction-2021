@@ -18,9 +18,13 @@ knitr::opts_chunk$set(cache=TRUE,
 
 # Introduction
 
-Day 1 of NBA free agency is by far the biggest day of the offseason for the league. While last year's class itself wasn't as star studded as 2019, it still provided plenty of drama with the COVID-19 pandemic still hanging around like an ominous cloud. The Milwaukee Bucks' trade for Bogdan Bogdanović of the Sacramento Kings was leaked before the official opening of the moratorium and subsequently backtracked, allowing the Atlanta Hawks to swoop in and sign Bogdanović to a [4-year, `$72M` contract](https://www.nba.com/news/report-hawks-sign-bogdan-bogdanovic-to-offer-sheet). Anthony Davis shut down speculation that he was going to take a shorter-term contract to maximize his earning potential in later years by agreeing to a [5-year, `$190M` maximum contract extension](https://www.espn.com/nba/story/_/id/30442167/anthony-davis-finalizing-five-year-190-million-maximum-contract-stay-los-angeles-lakers) with the Los Angeles Lakers. Jerami Grant desired a shot at being a Number 1 option, signing a [3-year, `$60M` contract](https://www.denverpost.com/2020/11/20/jerami-grant-pistons-reach-agreement-nuggets/) with the rebuilding Detroit Pistons after rejecting a similar deal to re-sign with the promising Denver Nuggets, who had reached the Western Conference Finals that year. And Gordon Hayward closed the fascinating Boston chapter of his NBA career, opting out of `$34.2M` and signing with the Charlotte Hornets to the tune of [4 years and `$120M`](https://www.cbssports.com/nba/news/celtics-hornets-complete-gordon-hayward-sign-and-trade-exchange-future-second-round-pick/).
+Day 1 of NBA free agency is by far the biggest day of the offseason for the league. While last year's class itself wasn't as star studded as 2019, it still provided plenty of drama with the COVID-19 pandemic still hanging around like an ominous cloud. The Milwaukee Bucks' trade for **Bogdan Bogdanović** of the Sacramento Kings was leaked before the official opening of the moratorium and subsequently backtracked, allowing the Atlanta Hawks to swoop in and sign Bogdanović to a [4-year, `$72M` contract](https://www.nba.com/news/report-hawks-sign-bogdan-bogdanovic-to-offer-sheet). **Anthony Davis** shut down speculation that he was going to take a shorter-term contract to maximize his earning potential in later years by agreeing to a [5-year, `$190M` maximum contract extension](https://www.espn.com/nba/story/_/id/30442167/anthony-davis-finalizing-five-year-190-million-maximum-contract-stay-los-angeles-lakers) with the Los Angeles Lakers. **Jerami Grant** desired a shot at being a Number 1 option, signing a [3-year, `$60M` contract](https://www.denverpost.com/2020/11/20/jerami-grant-pistons-reach-agreement-nuggets/) with the rebuilding Detroit Pistons after rejecting a similar deal to re-sign with the promising Denver Nuggets, who had reached the Western Conference Finals that year. And **Gordon Hayward** closed the fascinating Boston chapter of his NBA career, opting out of `$34.2M` and signing with the Charlotte Hornets to the tune of [4 years and `$120M`](https://www.cbssports.com/nba/news/celtics-hornets-complete-gordon-hayward-sign-and-trade-exchange-future-second-round-pick/).
 
-*ADD SEGUE HERE*
+This year, the class is headlined by two players with player options, meaning they may not even hit the market if they pick their options up. At the start of the season, it was almost a guarantee that 35-year-old point guard **Chris Paul**, newly acquired in a trade by the Phoenix Suns, would accept his `$44M` player option. It was also widely assumed that small forward **Kawhi Leonard** of the Los Angeles Clippers would be opting out of his `$36M` option. Fast forward to now: Paul has helped lead the young Suns to a NBA Finals appearance, while Leonard suffered a partially torn ACL in the second round of the playoffs, sidelining him for possibly the entire 2022 season after surgery. Reports have trickled out that Paul might opt out and seek a 3-year & `$100M` deal, while it's a distinct possibility that Leonard opts in to continue his rehab under the Clippers.
+
+In terms of restricted free agents, the top players are **Lonzo Ball, John Collins** & **Jarrett Allen**. Collins is a bouncy power forward who has spent the past three years catching lobs from Trae Young in Atlanta. He reportedly turned down a `$90M` extension, believing himself to be max-contract worthy, but he might be a casualty of the Hawks' future cap crunch. Ball might not have lived up to his astronomical hype as the No. 2 overall pick in 2016, but he's a solid point guard with plus defense & playmaking acumen. Allen was shipped out to the Cleveland Cavaliers as the key young piece in the trade that brought James Harden to the Brooklyn Nets, thus being freed from the shackles of a timeshare with fellow centre Deandre Jordan.
+
+On the unrestricted free agent side, we've got **DeMar DeRozan, Mike Conley** & **Kyle Lowry** topping the lists. After spending the majority of his career as a shooting guard, DeRozan has reinvented himself as a point forward in San Antonio under the tutelage of legendary coach Gregg Popovich, averaging almost 7 assists a game. Conley struggled in his first season with the Utah Jazz, battling injuries and attempting to adapt on the fly to coach Quin Snyder's system. He was able to put it all together this season, playing an integral part in helping the Jazz finish with the league's best record and even making his first All-Star team. Speculation ran rampant that Lowry was going to be traded this year, possibly ending an extremely successful 8-year tenure with the Toronto Raptors that included an NBA championship in 2019. He ultimately stayed put, but with the Raptors trending towards a possible retool/rebuild and Lowry wanting to add to his ring count, media discussion quickly turned to offseason destinations. This shifted into overdrive when the Philadelphia 76ers & Miami Heat (who were both rumored to be heavily pursuing the Raptors point guard during the season) flamed out early in the playoffs.
 
 What I wanted to do was predict what contracts this year's free agent class might get based off previous offseasons. Stars generally get star-type money, but in tiers below, contracts of comparable players usually come up in discussing contract value.
 
@@ -71,6 +75,8 @@ if(!require(formattable))
   install.packages("ggdark", repos = "http://cran.us.r-project.org")
 
 ```
+
+\newpage
 
 ## Importing the Data
 
@@ -269,6 +275,8 @@ combined_predictions %>%
 ```
 Harrell, Gasol & Ibaka seemingly took less money in exchange for a greater shot at a championship ring. Ibaka went to the Los Angeles Clippers, while Gasol joined the Los Angeles Lakers. Harrell actually didn't even change cities, swapping Clipper blue for Laker purple across the hall. Anthony returned to Portland, repaying the faith the Trail Blazers showed in him when they extended a contract offer to him during the 2020 season. Whiteside didn't receive any competitive offers with his reputation as an "empty-stats" player, and returned to his old stomping grounds in Sacramento with a near-minimum contract in hand. Upon further research, Korkmaz actually wasn't a free agent, having signed a 2-year contract in 2019. Dragić received a "legacy" contract from the Miami Heat, a 2-year balloon deal to thank him for his years of service with a team option on the 2nd year to maintain flexibility. Robinson signing with the Sacramento Kings on a 1-year, \$ 2M contract was surprising, as his potential as a rangy 3 & D wing should have enticed championship contenders.
 
+\newpage
+
 On a more positive note, here's some players on which the models were very close on.
 
 ```{r last_yr_extreme_sal_close,echo=FALSE}
@@ -302,6 +310,8 @@ combined_predictions %>% filter(contract_yrs %in% c(1:5) & yrs_y1s2 %in% c(1:5))
 ```{r remove_retrospective_vars,include=FALSE}
 rm(y1_rmse,s1_rmse,y1_yr_heatmap,s1_yr_heatmap,s1y2_yr_acc,y1s2_yr_acc,combined_predictions)
 ```
+
+\newpage
 
 ## Data Exploration and Visualizations
 
@@ -570,6 +580,8 @@ wf=wf %>% finalize_workflow(tune_multinom %>% select_best())
 fit_y1_multinom=fit(wf,train_set)
 ```
 
+\newpage
+
 Let's get the most important variables of the multinomial model.
 
 ```{r multinom_top_vars,echo=FALSE, fig.align='center',out.width="100%"}
@@ -703,7 +715,7 @@ models<-bind_rows(models,
 models %>% knitr::kable()
 ```
 
-The SVM suffers from the same problem that I talked about when fitting the decision tree. It has the highest F1 score, but the lowest accuracy. In fact, there are almost as many predictions more than 1 year off as there are correct predictions. The random forest stands far above the rest with 98% accuracy! It also has the highest F1-score barring the SVM. In last year's project, the random forests had the best performance as well, but had difficulty distinguishing 5-year contracts. Shifting to a classification problem seems to have solved that. The multinomial model pipped the KNN model in F1-score and had significantly more max-year predictions, whereas KNN has 3% better accuracy. While anticlimactic, I think the best course of action is to simply use the random forest model to make contract-year predictions. We'll convert the prediction column to use it as a numeric predictor. 
+The SVM suffers from the same problem that I talked about when fitting the decision tree. It has the highest F1 score, but the lowest accuracy. In fact, there are almost as many predictions more than 1 year off as there are correct predictions. The random forest stands far above the rest with 98% accuracy! It also has the highest F1-score barring the SVM. In last year's project, the random forests had the best performance as well, but had difficulty distinguishing 5-year contracts. Shifting to a classification problem seems to have solved that. The multinomial model had significantly more max-year predictions than KNN, whereas KNN pipped the multinomial model in F1-score and had ~1% better accuracy. While anticlimactic, I think the best course of action is to simply use the random forest model to make contract-year predictions. We'll convert the prediction column to use it as a numeric predictor. 
 
 ```{r y1_predict_for_s2}
 train_set_after_y1=train_set %>% select(-contract_yrs) %>% 
@@ -718,6 +730,9 @@ cv=vfold_cv(train_set_after_y1,v=10,strata=type,repeats=5)
 s2_recipe=recipe(first_year_percent_of_cap~.,data=train_set_after_y1) %>% 
   update_role(seas_id:player,new_role="id") %>% step_dummy(type)
 ```
+
+\newpage
+
 Now I can run through the models for salary using the predicted years as an input. The models I won't reuse are the multinomial model and the decision tree. The multinomial model is for classification only, while we are attempting to predict a continuous outcome in the first year salary as a percentage of the salary cap. We'll sub in a linear regression model as our new baseline. Since there's so many different salary percentages, a decision tree model would be useless or far too complicated.
 
 ```{r lin_sal_dep, fig.align='center',out.width="100%"}
@@ -761,7 +776,7 @@ tune_forest %>% select_best(metric="rmse") %>% knitr::kable()
 prettify_vip(fit_s2_forest,"Random Forest S2 Model Variable Importance")
 ```
 
-Like the linear model, contract years are by far the most important variable in the random forest model, although not to the same extent. The 2nd-thru-6th most important variables  are all from the contract-year subset of statistics, 3 of these being advanced stats.
+Like the linear model, contract years are by far the most important variable in the random forest model, although not to the same extent. The 2nd-thru-5th most important variables  are all from the contract-year subset of statistics, 3 of these being advanced stats.
 
 ```{r svm_sal_dep}
 set.seed(100,sample.kind = "Rounding")
@@ -787,7 +802,9 @@ models<-bind_rows(models,
                   get_sal_metrics(fit_s2_svm,"SVM",tune_svm,train_set_after_y1))
 models %>% knitr::kable()
 ```
-Mean absolute error is the measure of the average difference between forecasts, while the residual mean squared error penalizes large errors. The SVM model actually has the best RMSE this time around, but the random forest also tops the leaderboard of maximizing predictions within 2% of actual value, and minimizing predictions that are more than 5% away. The linear model also has a very close RMSE to the random forest & SVM, but it suffers on the dataset-specific metrics. The KNN model has the worst RMSE, but still performs better on predictions than the linear model. With the SVM & random forest being so close in traditional metrics as well as the SVM being no slouch on dataset-specific metrics, we will take the mean of the two.
+Mean absolute error is the measure of the average difference between forecasts, while the residual mean squared error penalizes large errors. The random forest has the best RMSE, and also tops the leaderboard of maximizing predictions within 2% of actual value, and minimizing predictions that are more than 5% away. The linear model also has a very close RMSE to the random forest & SVM, but it suffers on the dataset-specific metrics. The KNN model has the worst RMSE, but still performs better on predictions than the linear model. With the SVM & random forest being so close in traditional metrics as well as the SVM being no slouch on dataset-specific metrics, we will take the mean of the SVM & random forest as our salary prediction in the Y1S2 model.
+
+\newpage
 
 ### Predicting Salary First, then Years
 
@@ -841,7 +858,9 @@ tune_forest %>% select_best(metric="rmse") %>% knitr::kable()
 prettify_vip(fit_s1_forest,"Random Forest S1 Model Variable Importance")
 ```
 
-The salary-first forest is more widely clustered at the top than the salary-second forest, having 5 variables >50% importance vs 1 respectively. Excluding contract years in the salary-second forest, the top 5 variables of importance are the same in both forests: minutes per game, points per game, value over replacement player, offensive & defensive win shares, all from the contract-year subset.
+The salary-first forest is more widely clustered at the top than the salary-second forest, having 5 variables >50% importance vs 1 respectively. Excluding contract years in the salary-second forest, the variables of importance follow the exact same order in both forests.
+
+\newpage
 
 ```{r svm_sal_indep}
 set.seed(100,sample.kind = "Rounding")
