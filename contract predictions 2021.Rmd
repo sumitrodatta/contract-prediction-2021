@@ -1126,27 +1126,30 @@ non_options=anti_join(final_results,current_fa_options %>% select(player)) %>%
 ```
 ```{r rfas_top_five,echo=FALSE}
 non_options %>% filter(type=="RFA") %>% select(-type) %>% slice(1:5) %>% 
-  kable()
+  kable() %>% kable_styling(latex_options="scale_down")
 ```
-The biggest between-model discrepancies belong to Ball & Nunn, who lose `$13M` & `$16M` respectively when switching to the S1Y2 model. Graham finds himself stuck behind 2021 No. 2 overall pick LaMelo Ball & fringe All-Star Terry Rozier in the Charlotte Hornets guard rotation. A team could pry him from the Hornets with a big enough offer sheet, as Charlotte would probably like to use that cap space to address their centre position.
+The biggest between-model discrepancies for RFAs belong to Ball & Nunn, who lose `$13M` & `$16M` respectively when switching to the S1Y2 model. Graham finds himself stuck behind 2021 No. 2 overall pick LaMelo Ball & fringe All-Star Terry Rozier in the Charlotte Hornets guard rotation. A team could pry him from the Hornets with a big enough offer sheet, as Charlotte would probably like to use that cap space to address their centre position.
 ```{r rfas_five_to_ten,echo=FALSE}
 non_options %>% filter(type=="RFA") %>% select(-type) %>% slice(6:10) %>% 
-  kable()
+  kable() %>% kable_styling(latex_options="scale_down")
 ```
-Robinson is often compared to the Nets' Joe Harris as both are sweet-shooting wings opening up the floor for superstar teammates. Harris provides more defensive chops & a midrange game, while Robinson is renowned for his off-ball movement. Last year, I projected Harris for 3-years and `$55-57M`, and he ended up getting 4-years and `$72M`. I was genuinely surprised by the projections for Markkanen & Trent Jr. In fact, I would say they should be flipped. The fact is, these models are exceedingly retrospective, with the only prospective variables being age & experience. They see Markkanen as an efficient scorer from both 2-point & 3-point range, while also being a serviceable rebounder. On the other hand, going by stats alone, Trent was inefficient with minimal contributions in rebounds and assists as well as a negative VORP. Never mind that Markkanen lost his starting lineup spot in the second half of the season, or that Trent turned down a contract extension before the season for 4 years & `$60M`.
+Robinson is often compared to the Nets' Joe Harris as both are sweet-shooting wings opening up the floor for superstar teammates. Harris provides more defensive chops & a midrange game, while Robinson is renowned for his off-ball movement. Last year, I projected Harris for 3-years and `$55-57M`, and he ended up getting 4-years and `$72M`. 
 
+I was genuinely surprised by the projections for Markkanen & Trent Jr. In fact, I would say they should be flipped. The fact is, these models are exceedingly retrospective, with the only prospective variables being age & experience. They see Markkanen as an efficient scorer from both 2-point & 3-point range, while also being a serviceable rebounder. On the other hand, going by stats alone, Trent was inefficient with minimal contributions in rebounds and assists as well as a negative VORP. Never mind that Markkanen lost his starting lineup spot in the second half of the season, or that Trent turned down a contract extension before the season for 4 years & `$60M`.
+
+On to the unrestricted free agents.
 ```{r ufas_top_five,echo=FALSE}
 non_options %>% filter(type=="UFA") %>% select(-type) %>% slice(1:5) %>% 
-  kable()
+  kable() %>% kable_styling(latex_options="scale_down")
 ```
-Conley is the only non-option free agent to break the `$100M` barrier.
+Conley is the only non-option free agent to break the `$100M` barrier, and that too by the slimmest of margins. DeRozan is a wildcard, as he has made an estimated `$175M` in career earnings and might take a pay cut in order to pursue a championship. Perhaps he does this to team up with best friend & former Raptors running mate Lowry, who was looking for a 2-year, `$50M` contract extension from teams interested in his services at the trade deadline. Fournier & Powell are in similar situations: acquired at the trade deadline by teams looking to bolster their playoff aspirations, they declined their player options to seek a larger payday. Powell offers more defense while Fournier is a better playmaker, but they are both scorers at heart, and as Bill Russell so eloquently stated: This game has always been and always will be about getting buckets.
 ```{r ufas_mid_five,echo=FALSE}
 non_options %>% filter(type=="UFA") %>% select(-type) %>% slice(6:10) %>% 
-  kable()
+  kable() %>% kable_styling(latex_options="scale_down")
 ```
-THJ is the first example of wildly different predictions between the two models, with a staggering discrepancy of `$52M`!
+Olynyk was sent to Houston as part of the trade that brought Victor Oladipo to Miami, putting up solid numbers for a tanking Rockets squad. Schröder has been rumored to be aiming for a `$120M`-`$140M` contract, but projections don't look to be as rosy. THJ is the first example of wildly different predictions between the two models, with a staggering discrepancy of `$52M`!
 ```{r ufas_last_five,echo=FALSE}
 non_options %>% filter(type=="UFA") %>% select(-type) %>% slice(11:15) %>% 
-  kable()
+  kable() %>% kable_styling(latex_options="scale_down")
 ```
-Batum rebuilt his value after being waived & stretched by the Hornets, becoming a valuable glue guy for the Clippers.
+Oubre had a nightmare start to his tenure with the Golden State Warriors, only making 7 of his first 50 3-point shots for a putrid 14% 3-point percentage. He never really recovered, with his numbers down across the board from his 2020 season with the Suns. Batum rebuilt his value after being waived & stretched by the Hornets, becoming a valuable glue guy for the Clippers. McConnell giveth & McConnell taketh, as he was 10th in the league for assists and topped the leaderboard in steals.
