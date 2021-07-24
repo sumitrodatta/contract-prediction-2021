@@ -1100,6 +1100,8 @@ final_results<-final_results %>%
 
 ### Player Option Decisions
 
+\newpage
+
 ```{r join_options,echo=FALSE}
 options_decisions=inner_join(final_results,current_fa_options) %>%
   arrange(desc(option_amt)) %>%
@@ -1153,3 +1155,23 @@ non_options %>% filter(type=="UFA") %>% select(-type) %>% slice(11:15) %>%
   kable() %>% kable_styling(latex_options="scale_down")
 ```
 Oubre had a nightmare start to his tenure with the Golden State Warriors, only making 7 of his first 50 3-point shots for a putrid 14% 3-point percentage. He never really recovered, with his numbers down across the board from his 2020 season with the Suns. Batum rebuilt his value after being waived & stretched by the Hornets, becoming a valuable glue guy for the Clippers. McConnell giveth & McConnell taketh, as he was 10th in the league for assists and topped the leaderboard in steals.
+
+```{r save_as_csvs,include=FALSE}
+write_csv(options_decisions,"Options.csv")
+write_csv(non_options,"Non-Option Contracts.csv")
+```
+
+# Conclusion
+
+Using a combination of contract year stats and last-three-years stats, we set out to predict NBA free agent contracts for the 2021 offseason. Since we had correlated targets in contract length and first year percent of salary cap, we predicted one target first and used its predictions as an input for the second target. The contract years were predicted as a classification problem, while the salary was predicted as a regression model We used six models: linear (for salary) & multinomial (for contract length) as baselines, k-nearest-neighbors, decision tree (only for predicting contract length), a random forest and a support vector machine. Chris Paul, Kawhi Leonard & Mike Conley are all projected to get above \$ 90 million in total contract value.
+
+The models suffer from being unable to quantify intangibles like playing reputation, team fit, within-season role changes, or willingness to take a reduced salary to be on a championship contender. The models also can't determine which team will sign which player. That highly depends on a sequence of events: if Team A signs this player, they don't have enough money to resign Player B, who then goes to Team C for less money, etc.
+
+Since salary and contract length were correlated, maybe I should have predicted them as a tuple instead of sequentially. Unfortunately, caret didn't have that capability of multi-target regression, but tidymodels does. Perhaps I should have implemented a time factor or weighted recent years more heavily, as team decision makers may have gotten smarter. I didn't remove highly correlated predictors by design, as I wanted the models themselves to perform feature selection and determine what the most important variables were.
+
+Future work could include trying more models, like boosting (in which models are added sequentially, with later models in the sequence attempting to correct the errors of earlier models). Another example might be adding a draft pedigree variable, as teams might be more willing to:
+
+A.  take a chance on a player with mediocre surface-level stats, as the team could believe the player was misused and the inherent talent is still there
+B.  pay up for a player with good stats, as the high pick of the player could signal to the player's higher potential
+
+A final option might be predicting a third target: whether a contract will end in an option year. Star players are more likely to demand the last year of their contract as a player option in order to take ownership of their future.
